@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Bell, Lock, User, Globe } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 
 export default function Settings() {
   return (
@@ -97,6 +98,50 @@ export default function Settings() {
                   <p className="text-sm text-muted-foreground">Toggle dark mode theme</p>
                 </div>
                 <Switch />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Globe className="h-5 w-5 text-primary" />
+                <CardTitle>Integration Health</CardTitle>
+              </div>
+              <CardDescription>Status of connections with external systems.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between p-3 border rounded-lg bg-emerald-50/50 dark:bg-emerald-900/10 border-emerald-100 dark:border-emerald-900/20">
+                <div className="flex items-center gap-3">
+                  <div className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <div>
+                    <p className="font-medium text-sm">Oracle Health (Cerner)</p>
+                    <p className="text-xs text-muted-foreground">Last sync: 2 mins ago</p>
+                  </div>
+                </div>
+                <Badge variant="outline" className="border-emerald-200 text-emerald-700 dark:text-emerald-400">Connected</Badge>
+              </div>
+
+              <div className="flex items-center justify-between p-3 border rounded-lg bg-emerald-50/50 dark:bg-emerald-900/10 border-emerald-100 dark:border-emerald-900/20">
+                <div className="flex items-center gap-3">
+                  <div className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <div>
+                    <p className="font-medium text-sm">Payor Clearinghouse</p>
+                    <p className="text-xs text-muted-foreground">Last sync: 45 mins ago</p>
+                  </div>
+                </div>
+                <Badge variant="outline" className="border-emerald-200 text-emerald-700 dark:text-emerald-400">Connected</Badge>
+              </div>
+
+              <div className="flex items-center justify-between p-3 border rounded-lg bg-amber-50/50 dark:bg-amber-900/10 border-amber-100 dark:border-amber-900/20">
+                <div className="flex items-center gap-3">
+                  <div className="h-2.5 w-2.5 rounded-full bg-amber-500" />
+                  <div>
+                    <p className="font-medium text-sm">Document Storage (S3)</p>
+                    <p className="text-xs text-muted-foreground">Latency detected (400ms)</p>
+                  </div>
+                </div>
+                <Badge variant="outline" className="border-amber-200 text-amber-700 dark:text-amber-400">Degraded</Badge>
               </div>
             </CardContent>
           </Card>

@@ -19,13 +19,22 @@ import {
   SelectTrigger, 
   SelectValue 
 } from "@/components/ui/select";
-import { Filter, Download, ArrowUpDown, MoreHorizontal } from "lucide-react";
+import { Filter, Download, ArrowUpDown, MoreHorizontal, ChevronRight, AlertCircle, CheckCircle2, FileSearch } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
+import { Separator } from "@/components/ui/separator";
 
 const varianceData = [
   { id: "V-2023-001", patient: "John Smith", mrn: "882101", payor: "BlueCross Shield", serviceDate: "2024-05-12", billed: 4500.00, allowed: 2100.00, paid: 1850.00, variance: -250.00, status: "Open", type: "Underpayment" },
@@ -133,43 +142,117 @@ export default function Variances() {
               </TableHeader>
               <TableBody>
                 {varianceData.map((row) => (
-                  <TableRow key={row.id}>
-                    <TableCell className="font-mono text-xs text-muted-foreground">{row.id}</TableCell>
-                    <TableCell>
-                      <div className="font-medium">{row.patient}</div>
-                      <div className="text-xs text-muted-foreground">MRN: {row.mrn}</div>
-                    </TableCell>
-                    <TableCell>{row.payor}</TableCell>
-                    <TableCell>{row.serviceDate}</TableCell>
-                    <TableCell className="text-right font-mono">${row.allowed.toFixed(2)}</TableCell>
-                    <TableCell className="text-right font-mono">${row.paid.toFixed(2)}</TableCell>
-                    <TableCell className={cn("text-right font-mono font-medium", row.variance < 0 ? "text-red-600" : "text-green-600")}>
-                      {row.variance.toFixed(2)}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={
-                        row.status === "Open" ? "destructive" : 
-                        row.status === "Closed" ? "secondary" : 
-                        "outline"
-                      }>
-                        {row.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
+                  <Sheet key={row.id}>
+                    <SheetTrigger asChild>
+                      <TableRow className="cursor-pointer hover:bg-muted/50">
+                        <TableCell className="font-mono text-xs text-muted-foreground">{row.id}</TableCell>
+                        <TableCell>
+                          <div className="font-medium">{row.patient}</div>
+                          <div className="text-xs text-muted-foreground">MRN: {row.mrn}</div>
+                        </TableCell>
+                        <TableCell>{row.payor}</TableCell>
+                        <TableCell>{row.serviceDate}</TableCell>
+                        <TableCell className="text-right font-mono">${row.allowed.toFixed(2)}</TableCell>
+                        <TableCell className="text-right font-mono">${row.paid.toFixed(2)}</TableCell>
+                        <TableCell className={cn("text-right font-mono font-medium", row.variance < 0 ? "text-red-600" : "text-green-600")}>
+                          {row.variance.toFixed(2)}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={
+                            row.status === "Open" ? "destructive" : 
+                            row.status === "Closed" ? "secondary" : 
+                            "outline"
+                          }>
+                            {row.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
                           <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <MoreHorizontal className="h-4 w-4" />
+                            <ChevronRight className="h-4 w-4 text-muted-foreground" />
                           </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem>View Claim</DropdownMenuItem>
-                          <DropdownMenuItem>Start Appeal</DropdownMenuItem>
-                          <DropdownMenuItem>Mark as Resolved</DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
+                        </TableCell>
+                      </TableRow>
+                    </SheetTrigger>
+                    <SheetContent className="w-[600px] sm:w-[600px] overflow-y-auto">
+                      <SheetHeader>
+                        <div className="flex items-center gap-2 mb-2">
+                          <Badge variant={row.status === "Open" ? "destructive" : "outline"}>
+                            {row.status}
+                          </Badge>
+                          <span className="text-sm text-muted-foreground font-mono">{row.id}</span>
+                        </div>
+                        <SheetTitle className="text-xl font-display">{row.type} Detected</SheetTitle>
+                        <SheetDescription>
+                          Discrepancy identified on {row.serviceDate} for {row.patient}.
+                        </SheetDescription>
+                      </SheetHeader>
+
+                      <div className="mt-6 space-y-6">
+                        {/* Financial Summary */}
+                        <div className="grid grid-cols-3 gap-4">
+                          <div className="p-4 rounded-lg bg-secondary/50 border">
+                            <p className="text-xs text-muted-foreground mb-1">Expected</p>
+                            <p className="text-lg font-bold">${row.allowed.toFixed(2)}</p>
+                          </div>
+                          <div className="p-4 rounded-lg bg-secondary/50 border">
+                            <p className="text-xs text-muted-foreground mb-1">Actual Paid</p>
+                            <p className="text-lg font-bold">${row.paid.toFixed(2)}</p>
+                          </div>
+                          <div className="p-4 rounded-lg bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/20">
+                            <p className="text-xs text-red-600 dark:text-red-400 mb-1">Variance</p>
+                            <p className="text-lg font-bold text-red-600 dark:text-red-400">{row.variance.toFixed(2)}</p>
+                          </div>
+                        </div>
+
+                        {/* Root Cause Analysis */}
+                        <Card>
+                          <CardHeader className="pb-2">
+                            <CardTitle className="text-base flex items-center gap-2">
+                              <FileSearch className="h-4 w-4 text-primary" />
+                              Root Cause Analysis
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="space-y-4">
+                              <div className="flex gap-3">
+                                <div className="mt-0.5">
+                                  <AlertCircle className="h-4 w-4 text-amber-500" />
+                                </div>
+                                <div>
+                                  <p className="text-sm font-medium">Bundled Rate Mismatch</p>
+                                  <p className="text-sm text-muted-foreground mt-1">
+                                    Payor applied a standard bundled rate of $200.00, but the contract specifies a carve-out for training add-on ($50.00) which was ignored.
+                                  </p>
+                                </div>
+                              </div>
+                              <Separator />
+                              <div className="space-y-2">
+                                <p className="text-sm font-medium">Contract Reference</p>
+                                <div className="p-2 bg-muted rounded text-xs font-mono">
+                                  Section 4.2.1: Training Add-on Reimbursement
+                                  <br/>
+                                  "Provider shall be reimbursed an additional $50.00 per session..."
+                                </div>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+
+                        {/* Action Plan */}
+                        <div className="space-y-3">
+                          <h4 className="font-medium text-sm">Recommended Actions</h4>
+                          <Button className="w-full justify-start gap-2" variant="outline">
+                            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                            Initiate Bulk Appeal (Code 421)
+                          </Button>
+                          <Button className="w-full justify-start gap-2" variant="outline">
+                            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                            Update Fee Schedule Config
+                          </Button>
+                        </div>
+                      </div>
+                    </SheetContent>
+                  </Sheet>
                 ))}
               </TableBody>
             </Table>

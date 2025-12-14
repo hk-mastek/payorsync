@@ -12,6 +12,7 @@ import {
   Activity,
   Calendar
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { 
   AreaChart, 
   Area, 
@@ -199,54 +200,84 @@ export default function Dashboard() {
           </Card>
         </div>
 
-        {/* Recent Variances List */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle>Recent Variance Alerts</CardTitle>
-                <CardDescription>High priority payment discrepancies requiring attention.</CardDescription>
+        <div className="grid md:grid-cols-3 gap-6">
+          {/* Recent Variances List */}
+          <Card className="md:col-span-2">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Recent Variance Alerts</CardTitle>
+                  <CardDescription>High priority payment discrepancies requiring attention.</CardDescription>
+                </div>
+                <Button variant="outline" size="sm" asChild>
+                  <a href="/variances">View All</a>
+                </Button>
               </div>
-              <Button variant="outline" size="sm" asChild>
-                <a href="/variances">View All</a>
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {[
-                { id: "V-1023", patient: "JD-9921", payor: "BlueCross", desc: "Dialysis bundled rate mismatch", amount: "-$240.00", status: "Open" },
-                { id: "V-1024", patient: "AS-1102", payor: "Medicare", desc: "Denied claim: Authorization missing", amount: "-$1,200.00", status: "Investigating" },
-                { id: "V-1025", patient: "RK-5501", payor: "Aetna", desc: "Incorrect fee schedule applied", amount: "-$85.50", status: "Open" },
-                { id: "V-1026", patient: "TM-2291", payor: "United", desc: "Partial payment received", amount: "-$125.00", status: "Resolved" },
-              ].map((item) => (
-                <div key={item.id} className="flex items-center justify-between border-b last:border-0 pb-4 last:pb-0">
-                  <div className="flex items-start gap-4">
-                    <div className="mt-1 bg-red-100 dark:bg-red-900/30 p-2 rounded-full">
-                      <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400" />
-                    </div>
-                    <div>
-                      <div className="font-medium">{item.desc}</div>
-                      <div className="text-sm text-muted-foreground flex gap-2 mt-0.5">
-                        <span className="font-mono">{item.id}</span>
-                        <span>•</span>
-                        <span>{item.payor}</span>
-                        <span>•</span>
-                        <span>{item.patient}</span>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {[
+                  { id: "V-1023", patient: "JD-9921", payor: "BlueCross", desc: "Dialysis bundled rate mismatch", amount: "-$240.00", status: "Open" },
+                  { id: "V-1024", patient: "AS-1102", payor: "Medicare", desc: "Denied claim: Authorization missing", amount: "-$1,200.00", status: "Investigating" },
+                  { id: "V-1025", patient: "RK-5501", payor: "Aetna", desc: "Incorrect fee schedule applied", amount: "-$85.50", status: "Open" },
+                  { id: "V-1026", patient: "TM-2291", payor: "United", desc: "Partial payment received", amount: "-$125.00", status: "Resolved" },
+                ].map((item) => (
+                  <div key={item.id} className="flex items-center justify-between border-b last:border-0 pb-4 last:pb-0">
+                    <div className="flex items-start gap-4">
+                      <div className="mt-1 bg-red-100 dark:bg-red-900/30 p-2 rounded-full">
+                        <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400" />
+                      </div>
+                      <div>
+                        <div className="font-medium">{item.desc}</div>
+                        <div className="text-sm text-muted-foreground flex gap-2 mt-0.5">
+                          <span className="font-mono">{item.id}</span>
+                          <span>•</span>
+                          <span>{item.payor}</span>
+                          <span>•</span>
+                          <span>{item.patient}</span>
+                        </div>
                       </div>
                     </div>
+                    <div className="text-right">
+                      <div className="font-bold text-red-600">{item.amount}</div>
+                      <Badge variant={item.status === "Resolved" ? "secondary" : "outline"} className="mt-1 text-xs">
+                        {item.status}
+                      </Badge>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <div className="font-bold text-red-600">{item.amount}</div>
-                    <Badge variant={item.status === "Resolved" ? "secondary" : "outline"} className="mt-1 text-xs">
-                      {item.status}
-                    </Badge>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Activity Feed */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Live Activity</CardTitle>
+            </CardHeader>
+            <CardContent className="px-4">
+               <div className="space-y-6 border-l ml-3 pl-6">
+                 {[
+                   { text: "System detected 3 new variances", time: "10 mins ago", type: "alert" },
+                   { text: "John Doe resolved V-1026", time: "45 mins ago", type: "success" },
+                   { text: "Medicare 2025 Fee Schedule updated", time: "2 hours ago", type: "info" },
+                   { text: "Exported Q2 Financial Report", time: "4 hours ago", type: "info" },
+                 ].map((item, i) => (
+                   <div key={i} className="relative">
+                     <div className={cn(
+                       "absolute -left-[30px] top-1 h-2 w-2 rounded-full ring-4 ring-background",
+                       item.type === "alert" ? "bg-red-500" :
+                       item.type === "success" ? "bg-emerald-500" :
+                       "bg-blue-500"
+                     )} />
+                     <p className="text-sm font-medium leading-none">{item.text}</p>
+                     <p className="text-xs text-muted-foreground mt-1">{item.time}</p>
+                   </div>
+                 ))}
+               </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </DashboardLayout>
   );
