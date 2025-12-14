@@ -7,6 +7,9 @@ import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/dashboard";
 import Variances from "@/pages/variances";
 import Contracts from "@/pages/contracts";
+import Analytics from "@/pages/analytics";
+import Governance from "@/pages/governance";
+import Settings from "@/pages/settings";
 
 function Router() {
   return (
@@ -14,6 +17,9 @@ function Router() {
       <Route path="/" component={Dashboard} />
       <Route path="/variances" component={Variances} />
       <Route path="/contracts" component={Contracts} />
+      <Route path="/analytics" component={Analytics} />
+      <Route path="/governance" component={Governance} />
+      <Route path="/settings" component={Settings} />
       <Route component={NotFound} />
     </Switch>
   );
