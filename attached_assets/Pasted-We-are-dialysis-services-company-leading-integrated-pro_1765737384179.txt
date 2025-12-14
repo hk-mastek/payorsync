@@ -1,0 +1,20 @@
+We are dialysis services company - leading integrated provider of products and services for individuals with chronic kidney failure and related conditions-  who have implemented Oracle Health Patient Accounting, understand the problem mentioned below.
+Today, we face challenges with how executed payor contracts are translated into digitized, structured data that can integrate with its patient accounting system and accurately inform the calculation of expected reimbursement. Updates to payor policies, fee schedules, and rate changes must often be manually reflected in system configurations, creating ongoing maintenance burdens and increasing the risk of outdated or inconsistent contract data. In addition, investigating underpayments and overpayments requires staff to navigate multiple systems and rely on resource-intensive manual processes that lack a unified platform for variance detection, workflow management, and analysis. Through this Request for Information (RFI), we seek to better understand the range of vendor solutions available in the market that can
+ • Streamline the management of payor contracts across their lifecycle 
+• Maintain accurate pricing tools within the patient financial accounting system to correctly calculate expected reimbursement 
+• Automate the identification and classification of payment variances 
+• Provide advanced analytics and AI-enabled insights to support variance root-cause analysis 
+• Integrate effectively with FME’s existing technology environment, including its Oracle / Cerner electronic health-record and patient-accounting systems 
+
+The company needs solution for end-to-end workflow for payor contract management and payment variance analysis.
+The solution components are:
+Pre-Negotiation & Strategy
+Contract Drafting & Negotiation
+Contract Storage & Ingestion
+Obligation Tracking & Alerts
+Build & Maintain in EHR / Pricing Engine 
+Expected Reimbursement & Yield
+Payment Receipt & Posting
+Variance Identification & Prioritization
+Root Cause Analysis & Resolution
+Reporting, Continuous Improvement & Governance
