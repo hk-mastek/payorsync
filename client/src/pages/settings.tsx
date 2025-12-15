@@ -30,16 +30,16 @@ export default function Settings() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="firstName">First Name</Label>
-                  <Input id="firstName" defaultValue="John" />
+                  <Input id="firstName" defaultValue="Sarah" />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="lastName">Last Name</Label>
-                  <Input id="lastName" defaultValue="Doe" />
+                  <Input id="lastName" defaultValue="Holmes" />
                 </div>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="email">Email Address</Label>
-                <Input id="email" type="email" defaultValue="john.doe@nephroflow.com" />
+                <Input id="email" type="email" defaultValue="sarah.holmes@payorsync.com" />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="role">Role</Label>

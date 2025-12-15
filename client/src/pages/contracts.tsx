@@ -210,7 +210,7 @@ export default function Contracts() {
                             <TabsContent value="history" className="mt-6">
                                 <div className="space-y-6 relative border-l ml-4 pl-6 py-2">
                                     {[
-                                        { action: "Contract signed", user: "John Doe", date: "2023-12-15" },
+                                        { action: "Contract signed", user: "Sarah Holmes", date: "2023-12-15" },
                                         { action: "Legal review completed", user: "Legal Team", date: "2023-12-10" },
                                         { action: "Draft uploaded", user: "Sarah Smith", date: "2023-11-20" }
                                     ].map((event, i) => (

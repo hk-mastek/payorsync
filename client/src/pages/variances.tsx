@@ -35,6 +35,16 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { Separator } from "@/components/ui/separator";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 
 const varianceData = [
   { id: "V-2023-001", patient: "John Smith", mrn: "882101", payor: "BlueCross Shield", serviceDate: "2024-05-12", billed: 4500.00, allowed: 2100.00, paid: 1850.00, variance: -250.00, status: "Open", type: "Underpayment" },
@@ -241,10 +251,55 @@ export default function Variances() {
                         {/* Action Plan */}
                         <div className="space-y-3">
                           <h4 className="font-medium text-sm">Recommended Actions</h4>
-                          <Button className="w-full justify-start gap-2" variant="outline">
-                            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                            Initiate Bulk Appeal (Code 421)
-                          </Button>
+                          
+                          <Dialog>
+                            <DialogTrigger asChild>
+                                <Button className="w-full justify-start gap-2" variant="outline">
+                                    <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                                    Initiate Bulk Appeal (Code 421)
+                                </Button>
+                            </DialogTrigger>
+                            <DialogContent className="sm:max-w-[600px]">
+                                <DialogHeader>
+                                    <DialogTitle>Initiate Bulk Appeal</DialogTitle>
+                                    <DialogDescription>
+                                        Review and submit the appeal letter for the selected variances.
+                                    </DialogDescription>
+                                </DialogHeader>
+                                <div className="grid gap-4 py-4">
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-medium">Appeal Letter</label>
+                                        <Textarea 
+                                            className="h-[300px] font-mono text-sm"
+                                            defaultValue={`Date: ${new Date().toLocaleDateString()}
+
+RE: Appeal for Underpayment - Claim ID: ${row.id}
+Patient: ${row.patient} (MRN: ${row.mrn})
+Service Date: ${row.serviceDate}
+
+To Claims Department,
+
+This letter serves as a formal appeal regarding the underpayment of the above-referenced claim. Our records indicate that the claim was paid at $${row.paid.toFixed(2)}, while the contracted allowable amount is $${row.allowed.toFixed(2)}, resulting in a variance of $${Math.abs(row.variance).toFixed(2)}.
+
+The discrepancy appears to stem from the omission of the contracted add-on rate for training, as specified in Section 4.2.1 of our Agreement ("Training Add-on Reimbursement"). The contract clearly states: "Provider shall be reimbursed an additional $50.00 per session."
+
+Please review this claim and issue the additional payment of $${Math.abs(row.variance).toFixed(2)} to resolve this variance.
+
+Sincerely,
+
+Sarah Holmes
+Revenue Cycle Manager
+PAYORSYNC`}
+                                        />
+                                    </div>
+                                </div>
+                                <DialogFooter>
+                                    <Button variant="outline">Cancel</Button>
+                                    <Button>Submit Appeal</Button>
+                                </DialogFooter>
+                            </DialogContent>
+                          </Dialog>
+
                           <Button className="w-full justify-start gap-2" variant="outline">
                             <CheckCircle2 className="h-4 w-4 text-emerald-500" />
                             Update Fee Schedule Config

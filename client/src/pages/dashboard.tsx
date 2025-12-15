@@ -259,7 +259,7 @@ export default function Dashboard() {
                <div className="space-y-6 border-l ml-3 pl-6">
                  {[
                    { text: "System detected 3 new variances", time: "10 mins ago", type: "alert" },
-                   { text: "John Doe resolved V-1026", time: "45 mins ago", type: "success" },
+                   { text: "Sarah Holmes resolved V-1026", time: "45 mins ago", type: "success" },
                    { text: "Medicare 2025 Fee Schedule updated", time: "2 hours ago", type: "info" },
                    { text: "Exported Q2 Financial Report", time: "4 hours ago", type: "info" },
                  ].map((item, i) => (

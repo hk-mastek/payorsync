@@ -48,9 +48,9 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       <div className="flex h-16 items-center px-6 border-b border-sidebar-border">
         <div className="flex items-center gap-2 font-display font-bold text-xl">
           <div className="h-8 w-8 rounded bg-sidebar-primary flex items-center justify-center">
-            <span className="text-white">N</span>
+            <span className="text-white">P</span>
           </div>
-          <span>NephroFlow</span>
+          <span>PAYORSYNC</span>
         </div>
       </div>
       <div className="flex-1 overflow-y-auto py-4">
@@ -79,10 +79,10 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         <div className="flex items-center gap-3 px-2">
           <Avatar className="h-9 w-9 border border-sidebar-border">
             <AvatarImage src="https://github.com/shadcn.png" />
-            <AvatarFallback>JD</AvatarFallback>
+            <AvatarFallback>SH</AvatarFallback>
           </Avatar>
           <div className="flex flex-col">
-            <span className="text-sm font-medium text-white">John Doe</span>
+            <span className="text-sm font-medium text-white">Sarah Holmes</span>
             <span className="text-xs text-sidebar-foreground/60">Revenue Manager</span>
           </div>
         </div>
@@ -131,7 +131,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon" className="rounded-full">
                   <Avatar className="h-8 w-8">
-                    <AvatarFallback>JD</AvatarFallback>
+                    <AvatarFallback>SH</AvatarFallback>
                   </Avatar>
                 </Button>
               </DropdownMenuTrigger>
