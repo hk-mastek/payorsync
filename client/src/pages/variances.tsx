@@ -256,12 +256,12 @@ export default function Variances() {
                             <DialogTrigger asChild>
                                 <Button className="w-full justify-start gap-2" variant="outline">
                                     <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                                    Initiate Bulk Appeal (Code 421)
+                                    Initiate Appeal (Code 421)
                                 </Button>
                             </DialogTrigger>
                             <DialogContent className="sm:max-w-[600px]">
                                 <DialogHeader>
-                                    <DialogTitle>Initiate Bulk Appeal</DialogTitle>
+                                    <DialogTitle>Initiate Appeal (Code 421)</DialogTitle>
                                     <DialogDescription>
                                         Review and submit the appeal letter for the selected variances.
                                     </DialogDescription>
