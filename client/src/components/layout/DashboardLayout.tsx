@@ -10,7 +10,9 @@ import {
   Search,
   User,
   ShieldCheck,
-  Menu
+  Menu,
+  PenTool,
+  BookOpen
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,6 +39,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const navigation = [
     { name: 'Dashboard', href: '/', icon: LayoutDashboard },
     { name: 'Contracts', href: '/contracts', icon: FileText },
+    { name: 'Drafting', href: '/drafter', icon: PenTool },
+    { name: 'Library', href: '/clause-library', icon: BookOpen },
     { name: 'Variances', href: '/variances', icon: AlertTriangle },
     { name: 'Analytics', href: '/analytics', icon: BarChart3 },
     { name: 'Governance', href: '/governance', icon: ShieldCheck },

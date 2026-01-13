@@ -10,6 +10,8 @@ import Contracts from "@/pages/contracts";
 import Analytics from "@/pages/analytics";
 import Governance from "@/pages/governance";
 import Settings from "@/pages/settings";
+import ClauseLibrary from "@/pages/clause-library";
+import ContractDrafter from "@/pages/contract-drafter";
 
 function Router() {
   return (
@@ -20,6 +22,8 @@ function Router() {
       <Route path="/analytics" component={Analytics} />
       <Route path="/governance" component={Governance} />
       <Route path="/settings" component={Settings} />
+      <Route path="/clause-library" component={ClauseLibrary} />
+      <Route path="/drafter" component={ContractDrafter} />
       <Route component={NotFound} />
     </Switch>
   );

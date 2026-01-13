@@ -1,0 +1,1261 @@
+Build an advanced Contract Management Module for PayorSync with AI-powered clause library and intelligent contract drafting capabilities:
+
+-------------------------------------------------------------------------------
+PART 1: CORE ARCHITECTURE & TECH STACK
+-------------------------------------------------------------------------------
+
+BACKEND STACK:
+- Python 3.11+ with FastAPI framework
+- PostgreSQL 15+ for relational data (contracts, workflows, audit trails)
+- Vector Database: Pinecone, Weaviate, or pgvector extension for semantic clause search
+- LangChain framework for RAG implementation
+- OpenAI GPT-4 or Anthropic Claude API for AI-powered clause suggestions
+- Sentence Transformers (e.g., all-MiniLM-L6-v2) for embedding generation
+- Redis for caching frequently accessed clauses and templates
+- Celery for background tasks (embedding generation, bulk operations)
+
+FRONTEND STACK:
+- React 18+ with TypeScript
+- TanStack Query (React Query) for server state management
+- Zustand or Redux Toolkit for client state
+- Lexical or TipTap rich text editor for contract drafting
+- React Beautiful DnD for drag-and-drop clause arrangement
+- Tailwind CSS + shadcn/ui components
+- React Flow for visual workflow representation
+
+-------------------------------------------------------------------------------
+PART 2: DATABASE SCHEMA DESIGN
+-------------------------------------------------------------------------------
+
+CREATE COMPREHENSIVE SCHEMA:
+
+1. CLAUSE LIBRARY TABLES:
+
+   clause_categories (
+     id UUID PRIMARY KEY,
+     category_name VARCHAR(200) UNIQUE NOT NULL, -- 'reimbursement methodology', 'timely filing', etc.
+     parent_category_id UUID REFERENCES clause_categories(id),
+     description TEXT,
+     display_order INTEGER,
+     is_active BOOLEAN DEFAULT true,
+     created_at TIMESTAMP,
+     updated_at TIMESTAMP
+   )
+   -- Index: category_name, parent_category_id
+
+   clause_templates (
+     id UUID PRIMARY KEY,
+     clause_code VARCHAR(50) UNIQUE NOT NULL, -- 'ESRD-BUNDLE-145', 'EPO-ASP-PLUS6'
+     clause_title VARCHAR(500) NOT NULL,
+     clause_text TEXT NOT NULL,
+     clause_version VARCHAR(20) NOT NULL, -- Semantic versioning: 1.0.0
+     category_id UUID REFERENCES clause_categories(id),
+     
+     -- Metadata
+     payor_types TEXT[], -- ['commercial', 'medicare_advantage', 'managed_medicaid']
+     jurisdictions TEXT[], -- ['federal', 'CA', 'TX', 'FL']
+     service_types TEXT[], -- ['dialysis', 'pharmacy', 'physician']
+     effective_date DATE,
+     expiration_date DATE,
+     
+     -- Legal approval workflow
+     status VARCHAR(50) DEFAULT 'draft', -- draft, pending_review, legal_approved, active, deprecated, archived
+     created_by UUID REFERENCES users(id),
+     approved_by UUID REFERENCES users(id),
+     approved_at TIMESTAMP,
+     
+     -- AI/RAG features
+     embedding_vector VECTOR(384), -- For pgvector, adjust dimension based on model
+     usage_count INTEGER DEFAULT 0,
+     last_used_at TIMESTAMP,
+     
+     -- Compliance & tags
+     regulatory_references TEXT[], -- ['42 CFR 405', 'Medicare Manual Chapter 8']
+     compliance_notes TEXT,
+     tags TEXT[], -- ['bundled_payment', 'drug_pricing', 'esrd']
+     
+     -- Version control
+     is_current_version BOOLEAN DEFAULT true,
+     previous_version_id UUID REFERENCES clause_templates(id),
+     change_summary TEXT,
+     
+     created_at TIMESTAMP DEFAULT NOW(),
+     updated_at TIMESTAMP DEFAULT NOW()
+   )
+   -- Indexes: clause_code, category_id, status, payor_types (GIN), jurisdictions (GIN)
+   -- Vector index: embedding_vector USING ivfflat or hnsw
+
+   clause_variables (
+     id UUID PRIMARY KEY,
+     clause_id UUID REFERENCES clause_templates(id),
+     variable_name VARCHAR(100) NOT NULL, -- {{REIMBURSEMENT_RATE}}, {{FILING_DAYS}}
+     variable_type VARCHAR(50), -- 'percentage', 'currency', 'days', 'text'
+     default_value TEXT,
+     validation_rules JSONB, -- {"min": 100, "max": 200, "type": "percentage"}
+     description TEXT,
+     is_required BOOLEAN DEFAULT false
+   )
+
+   clause_relationships (
+     id UUID PRIMARY KEY,
+     parent_clause_id UUID REFERENCES clause_templates(id),
+     child_clause_id UUID REFERENCES clause_templates(id),
+     relationship_type VARCHAR(50), -- 'requires', 'conflicts_with', 'complements', 'supersedes'
+     description TEXT,
+     created_at TIMESTAMP
+   )
+   -- Ensures no duplicate relationships
+   -- Unique constraint: (parent_clause_id, child_clause_id, relationship_type)
+
+2. CONTRACT TEMPLATE TABLES:
+
+   contract_templates (
+     id UUID PRIMARY KEY,
+     template_name VARCHAR(200) NOT NULL, -- 'Commercial Dialysis - Fee-for-Service'
+     template_code VARCHAR(50) UNIQUE NOT NULL,
+     contract_type VARCHAR(100), -- 'commercial', 'medicare_advantage', 'managed_medicaid'
+     service_category VARCHAR(100), -- 'dialysis', 'pharmacy', 'physician'
+     payor_model VARCHAR(100), -- 'fee-for-service', 'capitation', 'bundled'
+     
+     description TEXT,
+     template_structure JSONB, -- Defines sections and their order
+     /*
+     {
+       "sections": [
+         {"order": 1, "name": "Definitions", "required": true},
+         {"order": 2, "name": "Reimbursement", "required": true, "subsections": [...]},
+         {"order": 3, "name": "Authorization Requirements", "required": false}
+       ]
+     }
+     */
+     
+     default_clauses JSONB[], -- Array of {clause_id, section, is_mandatory}
+     
+     status VARCHAR(50) DEFAULT 'active',
+     version VARCHAR(20),
+     is_current_version BOOLEAN DEFAULT true,
+     
+     created_by UUID REFERENCES users(id),
+     created_at TIMESTAMP DEFAULT NOW(),
+     updated_at TIMESTAMP DEFAULT NOW()
+   )
+   -- Indexes: template_code, contract_type, status
+
+   template_clause_mapping (
+     id UUID PRIMARY KEY,
+     template_id UUID REFERENCES contract_templates(id),
+     clause_id UUID REFERENCES clause_templates(id),
+     section_name VARCHAR(200),
+     subsection_name VARCHAR(200),
+     display_order INTEGER,
+     is_mandatory BOOLEAN DEFAULT false,
+     conditional_logic JSONB, -- When to include this clause
+     /*
+     {
+       "condition": "payor_state == 'CA' AND service_type == 'dialysis'"
+     }
+     */
+     created_at TIMESTAMP
+   )
+
+3. CONTRACT DRAFTING TABLES:
+
+   contracts (
+     id UUID PRIMARY KEY,
+     contract_number VARCHAR(100) UNIQUE NOT NULL,
+     contract_name VARCHAR(300) NOT NULL,
+     template_id UUID REFERENCES contract_templates(id),
+     
+     payor_id UUID REFERENCES payors(id),
+     payor_name VARCHAR(300),
+     payor_type VARCHAR(100),
+     jurisdiction VARCHAR(100),
+     
+     contract_status VARCHAR(50) DEFAULT 'draft', -- draft, in_review, legal_review, approved, executed, terminated
+     
+     effective_date DATE,
+     termination_date DATE,
+     renewal_terms TEXT,
+     
+     created_by UUID REFERENCES users(id),
+     assigned_to UUID REFERENCES users(id),
+     
+     metadata JSONB, -- Additional custom fields
+     
+     created_at TIMESTAMP DEFAULT NOW(),
+     updated_at TIMESTAMP DEFAULT NOW()
+   )
+
+   contract_clauses (
+     id UUID PRIMARY KEY,
+     contract_id UUID REFERENCES contracts(id),
+     clause_template_id UUID REFERENCES clause_templates(id),
+     
+     section_name VARCHAR(200),
+     subsection_name VARCHAR(200),
+     display_order INTEGER,
+     
+     clause_text TEXT NOT NULL, -- Actual text with variables resolved
+     customized_text TEXT, -- If analyst modified the clause
+     is_customized BOOLEAN DEFAULT false,
+     
+     variable_values JSONB, -- Resolved variables: {"REIMBURSEMENT_RATE": "145", "FILING_DAYS": "180"}
+     
+     status VARCHAR(50) DEFAULT 'active', -- active, removed, replaced
+     
+     added_by UUID REFERENCES users(id),
+     added_at TIMESTAMP DEFAULT NOW(),
+     modified_by UUID REFERENCES users(id),
+     modified_at TIMESTAMP
+   )
+
+   contract_versions (
+     id UUID PRIMARY KEY,
+     contract_id UUID REFERENCES contracts(id),
+     version_number INTEGER NOT NULL,
+     snapshot JSONB, -- Complete contract state at this version
+     change_summary TEXT,
+     changed_by UUID REFERENCES users(id),
+     created_at TIMESTAMP DEFAULT NOW()
+   )
+
+4. WORKFLOW & APPROVAL TABLES:
+
+   approval_workflows (
+     id UUID PRIMARY KEY,
+     workflow_name VARCHAR(200) NOT NULL,
+     workflow_type VARCHAR(100), -- 'clause_approval', 'contract_approval', 'template_approval'
+     
+     steps JSONB, -- Ordered array of approval steps
+     /*
+     [
+       {"step": 1, "role": "legal_reviewer", "required_approvals": 1},
+       {"step": 2, "role": "compliance_officer", "required_approvals": 1},
+       {"step": 3, "role": "senior_legal", "required_approvals": 1}
+     ]
+     */
+     
+     is_active BOOLEAN DEFAULT true,
+     created_at TIMESTAMP
+   )
+
+   approval_requests (
+     id UUID PRIMARY KEY,
+     workflow_id UUID REFERENCES approval_workflows(id),
+     
+     entity_type VARCHAR(50), -- 'clause', 'contract', 'template'
+     entity_id UUID NOT NULL, -- ID of the clause/contract/template
+     
+     current_step INTEGER DEFAULT 1,
+     overall_status VARCHAR(50) DEFAULT 'pending', -- pending, approved, rejected, cancelled
+     
+     requested_by UUID REFERENCES users(id),
+     requested_at TIMESTAMP DEFAULT NOW(),
+     completed_at TIMESTAMP,
+     
+     priority VARCHAR(20) DEFAULT 'normal' -- low, normal, high, urgent
+   )
+
+   approval_actions (
+     id UUID PRIMARY KEY,
+     request_id UUID REFERENCES approval_requests(id),
+     step_number INTEGER,
+     
+     approver_id UUID REFERENCES users(id),
+     action VARCHAR(50), -- 'approved', 'rejected', 'requested_changes'
+     comments TEXT,
+     action_date TIMESTAMP DEFAULT NOW(),
+     
+     attachments JSONB -- Supporting documents
+   )
+
+5. AI/RAG CONFIGURATION TABLES:
+
+   ai_suggestions_log (
+     id UUID PRIMARY KEY,
+     contract_id UUID REFERENCES contracts(id),
+     
+     user_context JSONB, -- User's current state when requesting suggestions
+     /*
+     {
+       "contract_type": "commercial",
+       "payor_type": "Blue Cross",
+       "jurisdiction": "CA",
+       "current_section": "Reimbursement"
+     }
+     */
+     
+     query_embedding VECTOR(384),
+     suggested_clauses JSONB, -- Array of suggested clause IDs with scores
+     /*
+     [
+       {"clause_id": "uuid", "similarity_score": 0.92, "rationale": "High match for dialysis bundled payment"},
+       {"clause_id": "uuid", "similarity_score": 0.87, "rationale": "Commonly used with CA commercial contracts"}
+     ]
+     */
+     
+     clauses_selected JSONB, -- Which suggestions were actually used
+     feedback_rating INTEGER, -- 1-5 rating from analyst
+     
+     created_at TIMESTAMP DEFAULT NOW()
+   )
+
+   search_analytics (
+     id UUID PRIMARY KEY,
+     user_id UUID REFERENCES users(id),
+     search_query TEXT,
+     search_filters JSONB,
+     results_count INTEGER,
+     clicked_clause_ids UUID[],
+     search_duration_ms INTEGER,
+     created_at TIMESTAMP DEFAULT NOW()
+   )
+
+6. PAYOR MANAGEMENT TABLES:
+
+   payors (
+     id UUID PRIMARY KEY,
+     payor_name VARCHAR(300) NOT NULL,
+     payor_code VARCHAR(50) UNIQUE,
+     payor_type VARCHAR(100), -- 'commercial', 'medicare_advantage', 'managed_medicaid', 'government'
+     
+     headquarters_state VARCHAR(2),
+     operating_states TEXT[],
+     
+     parent_organization VARCHAR(300),
+     is_active BOOLEAN DEFAULT true,
+     
+     contract_preferences JSONB, -- Preferred clauses, special requirements
+     standard_reimbursement_models TEXT[],
+     
+     contact_information JSONB,
+     notes TEXT,
+     
+     created_at TIMESTAMP DEFAULT NOW(),
+     updated_at TIMESTAMP DEFAULT NOW()
+   )
+
+-------------------------------------------------------------------------------
+PART 3: RAG-BASED AI IMPLEMENTATION
+-------------------------------------------------------------------------------
+
+IMPLEMENT INTELLIGENT CLAUSE RETRIEVAL SYSTEM:
+
+1. EMBEDDING GENERATION PIPELINE:
+
+   File: services/embedding_service.py
+   
+   Functions:
+   - generate_clause_embedding(clause_text: str) -> List[float]
+     * Use sentence-transformers model: 'all-MiniLM-L6-v2' or 'all-mpnet-base-v2'
+     * Normalize embeddings for cosine similarity
+     * Cache embeddings in Redis with 24hr TTL
+   
+   - batch_generate_embeddings(clause_ids: List[UUID])
+     * Process in batches of 50
+     * Update clause_templates.embedding_vector
+     * Handle failures gracefully with retry logic
+   
+   - regenerate_all_embeddings()
+     * Background task for reprocessing entire library
+     * Progress tracking and reporting
+     * Versioned embeddings for A/B testing different models
+
+2. SEMANTIC SEARCH ENGINE:
+
+   File: services/clause_search_service.py
+   
+   Class: ClauseSearchEngine
+   
+   Methods:
+   - semantic_search(query: str, filters: dict, top_k: int = 10) -> List[ClauseResult]
+     * Generate query embedding
+     * Perform vector similarity search
+     * Apply filters: payor_type, jurisdiction, category, status='legal_approved'
+     * Rerank results using cross-encoder for improved relevance
+     * Return with similarity scores and rationale
+   
+   - hybrid_search(query: str, filters: dict) -> List[ClauseResult]
+     * Combine semantic search with traditional keyword search (PostgreSQL full-text)
+     * Use reciprocal rank fusion to merge results
+     * Weight: 70% semantic + 30% keyword
+   
+   - contextual_clause_suggestions(context: ContractContext) -> List[ClauseResult]
+     * Input: contract_type, payor_type, jurisdiction, current_section, existing_clauses
+     * Build context-aware query from contract metadata
+     * Filter out already-selected clauses
+     * Apply business rules (e.g., mandatory clauses for Medicare contracts)
+     * Check for clause conflicts using clause_relationships table
+     * Return ranked suggestions with explanations
+
+3. RAG IMPLEMENTATION:
+
+   File: services/rag_service.py
+   
+   Class: ContractDraftingRAG
+   
+   Methods:
+   - get_intelligent_suggestions(
+       contract_context: dict,
+       user_query: Optional[str] = None,
+       section: Optional[str] = None
+     ) -> dict
+     
+     ALGORITHM:
+     Step 1: Context Understanding
+       - Extract: payor type, jurisdiction, service category, contract model
+       - Identify current drafting stage and incomplete sections
+     
+     Step 2: Retrieval
+       - If user_query provided: semantic search on query
+       - If section provided: retrieve clauses commonly used in that section for this contract type
+       - Apply mandatory clause rules
+       - Retrieve related clauses based on existing selections
+     
+     Step 3: Filtering & Ranking
+       - Jurisdictional compliance check
+       - Payor-specific preferences
+       - Historical usage patterns for similar contracts
+       - Conflict detection with existing clauses
+       - Scoring: (semantic_similarity * 0.4) + (usage_frequency * 0.2) + (recency * 0.1) + (compliance_match * 0.3)
+     
+     Step 4: Augmentation (LLM-powered insights)
+       - Send top 5 clauses + contract context to Claude/GPT-4
+       - Prompt: "Given this contract context and these clause options, explain which clauses are most appropriate and why. Consider compliance, standard practices, and payor preferences."
+       - Return AI-generated rationale for each suggestion
+     
+     Step 5: Return structured response:
+     {
+       "suggested_clauses": [
+         {
+           "clause_id": "uuid",
+           "clause_code": "ESRD-BUNDLE-145",
+           "clause_title": "ESRD Bundled Payment Rate",
+           "clause_text": "...",
+           "similarity_score": 0.92,
+           "ai_rationale": "This clause is highly recommended for commercial dialysis contracts...",
+           "category": "reimbursement methodology",
+           "usage_count": 247,
+           "last_used_with_similar_contracts": "2024-12-15"
+         }
+       ],
+       "mandatory_clauses": [...],
+       "complementary_clauses": [...],
+       "conflicting_clauses_to_avoid": [...]
+     }
+
+   - draft_clause_text(
+       clause_template_id: UUID,
+       variable_values: dict,
+       customization_instructions: Optional[str] = None
+     ) -> str
+     
+     * Fetch clause template
+     * Replace variables: {{REIMBURSEMENT_RATE}} ? actual value
+     * If customization requested, use LLM to modify clause while maintaining legal integrity
+     * Track customizations in contract_clauses.customized_text
+
+   - validate_clause_compatibility(
+       contract_id: UUID,
+       new_clause_id: UUID
+     ) -> ValidationResult
+     
+     * Check clause_relationships for conflicts
+     * Verify no duplicate clauses covering same topic
+     * Ensure all prerequisite clauses are present
+     * Return warnings/errors
+
+4. CONTEXT-AWARE AUTOCOMPLETE:
+
+   File: services/autocomplete_service.py
+   
+   - suggest_next_clause(contract_id: UUID, current_position: str) -> List[Clause]
+     * Analyze contract structure progression
+     * Identify missing standard clauses
+     * Suggest next logical clause based on template flow
+     * Learn from analyst patterns (if they always add X after Y, suggest it)
+
+-------------------------------------------------------------------------------
+PART 4: WORKFLOW ENGINE
+-------------------------------------------------------------------------------
+
+IMPLEMENT APPROVAL WORKFLOW SYSTEM:
+
+File: services/workflow_service.py
+
+Class: WorkflowEngine
+
+Methods:
+- initiate_clause_approval(clause_id: UUID, requested_by: UUID) -> UUID
+  * Create approval_request record
+  * Determine workflow based on clause category and impact
+  * Notify first approver(s)
+  * Return request_id
+
+- process_approval_action(
+    request_id: UUID,
+    approver_id: UUID,
+    action: str,  # 'approved', 'rejected', 'requested_changes'
+    comments: str
+  ) -> WorkflowStatus
+  
+  * Validate approver has authority for current step
+  * Record action in approval_actions
+  * If approved: move to next step or complete
+  * If rejected: notify requester, allow resubmission
+  * If all steps complete: update clause status to 'legal_approved'
+  * Send notifications at each state change
+
+- get_pending_approvals(user_id: UUID) -> List[ApprovalRequest]
+  * Return all pending approvals assigned to this user
+  * Group by priority and age
+  * Include contract/clause preview
+
+- auto_escalate_stale_approvals()
+  * Celery periodic task (runs daily)
+  * Find approvals pending > 3 days
+  * Send reminder notifications
+  * Escalate to manager if > 7 days
+
+BUSINESS RULES:
+- New clauses: Require legal_reviewer ? compliance_officer ? senior_legal
+- Minor clause updates: Require legal_reviewer only
+- Critical clauses (reimbursement, liability): Require senior_legal + compliance_director
+- Template changes: Require template_manager ? legal_reviewer ? VP_approval
+
+-------------------------------------------------------------------------------
+PART 5: FRONTEND IMPLEMENTATION
+-------------------------------------------------------------------------------
+
+BUILD INTELLIGENT CONTRACT DRAFTING INTERFACE:
+
+1. CLAUSE LIBRARY MANAGEMENT UI:
+
+   Component: ClauseLibraryManager.tsx
+   
+   Features:
+   - Hierarchical category tree view (expandable/collapsible)
+   - Advanced search with filters:
+     * Text search (supports boolean operators)
+     * Category multi-select
+     * Payor type, jurisdiction, status filters
+     * Date range (effective dates)
+     * Tags filter
+   
+   - Clause preview modal with:
+     * Full clause text with syntax highlighting for variables
+     * Metadata display (category, tags, versions)
+     * Usage statistics (used in X contracts)
+     * Related clauses (conflicts, complements)
+     * Version history with diff view
+   
+   - Bulk operations:
+     * Export selected clauses
+     * Batch tagging
+     * Bulk status updates (with workflow)
+   
+   - Create/Edit clause form:
+     * Rich text editor with variable insertion
+     * Category selector
+     * Tag management (auto-suggestions)
+     * Payor type & jurisdiction multi-select
+     * Regulatory reference linking
+     * Variable definition section
+     * Related clause selector
+     * Preview rendered clause
+
+2. INTELLIGENT CONTRACT DRAFTING INTERFACE:
+
+   Component: ContractDrafter.tsx
+   
+   Layout: Split-pane interface
+   
+   LEFT PANE: AI-Powered Clause Recommendations
+   ---------------------------------------------
+   <ClauseSuggestionPanel>
+   
+   - Context summary card showing:
+     * Contract type, payor, jurisdiction
+     * Current section being drafted
+     * Completion percentage
+   
+   - Intelligent suggestions section:
+     * "Recommended for You" (top 3-5 AI suggestions)
+     * Each suggestion shows:
+       - Clause title and code
+       - Similarity score visualization
+       - AI-generated rationale (expandable)
+       - Quick preview (first 100 chars)
+       - "Add to Contract" button
+       - "View Full Clause" link
+   
+   - Search clause library:
+     * Semantic search bar with instant results
+     * Recent searches
+     * Saved search filters
+   
+   - Browse by category:
+     * Expandable category tree
+     * Clause count badges
+     * Drag-and-drop to add clauses
+   
+   - Mandatory clauses checklist:
+     * Red indicator for missing mandatory clauses
+     * Auto-add all button
+   
+   - Relationship warnings:
+     * "?? Conflicting clause detected" alerts
+     * "?? Consider adding complementary clause" suggestions
+
+   CENTER PANE: Contract Editor
+   ---------------------------------------------
+   <ContractEditor>
+   
+   - Template selector dropdown (top)
+     * Filter by contract type
+     * Preview template structure
+   
+   - Rich text editor (Lexical/TipTap):
+     * Section headers (auto-numbered)
+     * Clause blocks (draggable to reorder)
+     * Each clause block shows:
+       - Clause title and code (small badge)
+       - Full text with highlighted variables
+       - Inline edit button
+       - Remove button
+       - Customize button (opens variable editor)
+       - Comment/note icon
+   
+   - Variable editor modal:
+     * Form for each variable in clause
+     * Validation based on variable type
+     * Real-time preview of rendered text
+   
+   - AI writing assistant:
+     * Select text ? "Ask AI to modify"
+     * Options: "Make more specific", "Simplify", "Add compliance details"
+   
+   - Version control toolbar:
+     * Save draft button
+     * Version dropdown (view previous versions)
+     * Track changes mode
+   
+   - Section management:
+     * Add section button
+     * Reorder sections (drag handles)
+     * Section completion indicators
+
+   RIGHT PANE: Contract Context & Tools
+   ---------------------------------------------
+   <ContractSidebar>
+   
+   - Contract metadata form:
+     * Payor selector (autocomplete)
+     * Effective/termination dates
+     * Contract number (auto-generated option)
+     * Custom fields
+   
+   - Smart checklist:
+     * All sections included ?
+     * All mandatory clauses added ?
+     * All variables populated ?
+     * No conflicting clauses ?
+     * Ready for review ?
+   
+   - Activity feed:
+     * Recent additions/modifications
+     * Collaborator actions (real-time)
+   
+   - Comments & notes:
+     * Section-level and clause-level comments
+     * @mention collaborators
+     * Resolve/unresolve threads
+   
+   - Quick actions:
+     * Generate PDF preview
+     * Export to Word
+     * Send for approval
+     * Save as template
+
+3. TEMPLATE BUILDER INTERFACE:
+
+   Component: TemplateBuilder.tsx
+   
+   Features:
+   - Visual template structure designer:
+     * Drag-and-drop section arrangement
+     * Define section hierarchy (sections ? subsections)
+     * Mark mandatory vs optional sections
+   
+   - Default clause assignment:
+     * For each section, assign default clauses
+     * Set clause as mandatory or optional
+     * Define conditional inclusion rules
+   
+   - Template versioning:
+     * Create new version from existing
+     * Compare versions (diff view)
+     * Deprecate old versions
+
+4. APPROVAL WORKFLOW DASHBOARD:
+
+   Component: ApprovalDashboard.tsx
+   
+   Views:
+   - My Pending Approvals (inbox):
+     * Filterable/sortable table
+     * Priority indicators
+     * Age of request
+     * Quick approve/reject actions
+     * Bulk actions
+   
+   - Approval detail modal:
+     * Full clause/contract preview
+     * Change summary
+     * Requester notes
+     * Approval history
+     * Action buttons: Approve, Reject, Request Changes
+     * Comment box
+   
+   - Tracking my submissions:
+     * Status of items I submitted
+     * Current approval step
+     * Approver information
+     * Estimated completion time
+
+5. ANALYTICS & REPORTING:
+
+   Component: ClauseAnalytics.tsx
+   
+   Dashboards:
+   - Clause usage statistics:
+     * Most used clauses (chart)
+     * Usage trends over time
+     * Clause effectiveness scoring
+   
+   - Template performance:
+     * Template usage by payor type
+     * Average time to draft by template
+   
+   - AI suggestion analytics:
+     * Acceptance rate of AI suggestions
+     * Top performing suggestion contexts
+     * User feedback on suggestions
+   
+   - Approval workflow metrics:
+     * Average approval time by step
+     * Bottleneck identification
+     * Approval/rejection rates
+
+-------------------------------------------------------------------------------
+PART 6: API ENDPOINTS
+-------------------------------------------------------------------------------
+
+FASTAPI ROUTES:
+
+File: routes/clause_routes.py
+
+GET    /api/clauses
+       - Query params: category, payor_type, jurisdiction, status, search_query, page, limit
+       - Returns: Paginated clause list with metadata
+
+GET    /api/clauses/{clause_id}
+       - Returns: Complete clause details with relationships and version history
+
+POST   /api/clauses
+       - Body: Clause data (title, text, category, metadata)
+       - Returns: Created clause (status=draft)
+       - Triggers: Embedding generation background task
+
+PUT    /api/clauses/{clause_id}
+       - Body: Updated clause data
+       - Returns: Updated clause
+       - Creates new version, preserves old version
+
+DELETE /api/clauses/{clause_id}
+       - Soft delete (status=archived)
+       - Validates not in use in active contracts
+
+POST   /api/clauses/search/semantic
+       - Body: {query, filters, top_k}
+       - Returns: Semantically similar clauses with scores
+
+POST   /api/clauses/{clause_id}/submit-approval
+       - Initiates approval workflow
+       - Returns: approval_request_id
+
+GET    /api/clauses/{clause_id}/versions
+       - Returns: Version history with diffs
+
+POST   /api/clauses/{clause_id}/duplicate
+       - Creates new clause from existing (new version number)
+
+-----------------------------------------------
+
+File: routes/template_routes.py
+
+GET    /api/templates
+       - Query params: contract_type, status
+       - Returns: Available contract templates
+
+GET    /api/templates/{template_id}
+       - Returns: Template with structure and default clauses
+
+POST   /api/templates
+       - Body: Template definition
+       - Returns: Created template
+
+PUT    /api/templates/{template_id}
+       - Updates template (creates new version)
+
+GET    /api/templates/{template_id}/preview
+       - Returns: Rendered template with sample clauses
+
+-----------------------------------------------
+
+File: routes/contract_routes.py
+
+GET    /api/contracts
+       - Query params: status, payor_id, created_by, date_range
+       - Returns: Contract list
+
+POST   /api/contracts
+       - Body: {template_id, payor_id, metadata}
+       - Returns: New draft contract
+
+GET    /api/contracts/{contract_id}
+       - Returns: Complete contract with all clauses
+
+PUT    /api/contracts/{contract_id}
+       - Updates contract metadata
+
+POST   /api/contracts/{contract_id}/clauses
+       - Body: {clause_template_id, section, variable_values, customization}
+       - Returns: Added clause with resolved text
+       - Validates compatibility
+
+PUT    /api/contracts/{contract_id}/clauses/{clause_id}
+       - Updates clause (customization, variables, position)
+
+DELETE /api/contracts/{contract_id}/clauses/{clause_id}
+       - Removes clause from contract
+
+POST   /api/contracts/{contract_id}/suggest-clauses
+       - Body: {section?, user_query?}
+       - Returns: AI-powered clause suggestions
+       - Uses RAG service
+
+POST   /api/contracts/{contract_id}/validate
+       - Returns: Validation results (missing mandatory clauses, conflicts)
+
+POST   /api/contracts/{contract_id}/submit-review
+       - Initiates contract approval workflow
+
+GET    /api/contracts/{contract_id}/export
+       - Query param: format (pdf, docx)
+       - Returns: Downloadable contract document
+
+GET    /api/contracts/{contract_id}/versions
+       - Returns: Version history
+
+POST   /api/contracts/{contract_id}/revert/{version_id}
+       - Reverts to previous version
+
+-----------------------------------------------
+
+File: routes/workflow_routes.py
+
+GET    /api/approvals/pending
+       - Returns: Current user's pending approvals
+
+GET    /api/approvals/submitted
+       - Returns: Approvals initiated by current user
+
+POST   /api/approvals/{request_id}/action
+       - Body: {action, comments, attachments}
+       - Returns: Updated approval status
+
+GET    /api/approvals/{request_id}
+       - Returns: Approval request details with history
+
+-----------------------------------------------
+
+File: routes/ai_routes.py
+
+POST   /api/ai/suggest-clauses
+       - Body: Contract context
+       - Returns: RAG-based suggestions
+
+POST   /api/ai/modify-clause
+       - Body: {clause_text, instruction}
+       - Returns: AI-modified clause text
+
+POST   /api/ai/explain-clause
+       - Body: {clause_id}
+       - Returns: Plain-language explanation
+
+POST   /api/ai/feedback
+       - Body: {suggestion_log_id, rating, comments}
+       - Logs feedback for model improvement
+
+-------------------------------------------------------------------------------
+PART 7: SECURITY & COMPLIANCE
+-------------------------------------------------------------------------------
+
+IMPLEMENT SECURITY MEASURES:
+
+1. Role-Based Access Control (RBAC):
+Roles:
+
+CONTRACT_ANALYST: Create/edit contracts, search clauses
+TEMPLATE_MANAGER: Manage templates and clause library
+LEGAL_REVIEWER: Approve clauses, review contracts
+COMPLIANCE_OFFICER: Approve high-risk clauses, audit access
+SENIOR_LEGAL: Final approval authority
+ADMIN: System configuration, user management
+
+Permissions:
+
+clause:read, clause:create, clause:edit, clause:delete, clause:approve
+contract:read, contract:create, contract:edit, contract:delete, contract:submit
+template:read, template:create, template:edit, template:delete
+approval:review, approval:override
+
+Middleware: Check permissions on every API call
+
+Audit Logging:
+Log all actions:
+
+Clause creation/modification (full diff)
+Contract drafting activities
+Search queries and results
+Approval actions with justifications
+Template changes
+User access patterns
+
+Retention: 7 years (compliance requirement)
+Audit reports:
+
+Who accessed what contract/clause
+Changes made to approved clauses
+Approval workflow audit trail
+
+
+Data Encryption:
+
+At rest: Encrypt contract_clauses.clause_text, contracts.metadata
+In transit: TLS 1.3 for all API calls
+Encryption keys: AWS KMS or similar key management
+
+
+Compliance Features:
+
+Electronic signature integration (DocuSign API)
+Regulatory reference validation
+HIPAA compliance for healthcare data
+SOC 2 Type II controls
+Data retention policies
+Right to deletion (GDPR compliance)
+
+
+
+-------------------------------------------------------------------------------
+PART 8: PERFORMANCE OPTIMIZATION
+-------------------------------------------------------------------------------
+IMPLEMENT PERFORMANCE ENHANCEMENTS:
+
+Caching Strategy:
+Redis caching for:
+
+Frequently accessed clauses (TTL: 1 hour)
+Template structures (TTL: 4 hours)
+User permissions (TTL: 15 minutes)
+Embeddings (TTL: 24 hours)
+Search results (TTL: 30 minutes)
+
+Cache invalidation:
+
+On clause update/approval
+On template modification
+On permission changes
+
+
+Database Optimization:
+
+Index all foreign keys
+Composite indexes on frequent query patterns
+Partial indexes on status fields (e.g., WHERE status='active')
+Vector index optimization (IVFFlat with nlist=100 for <1M vectors)
+Connection pooling (min=5, max=20)
+Query timeout: 30 seconds
+
+
+Background Processing:
+Celery tasks:
+
+Embedding generation (async)
+Bulk operations (async)
+Report generation (async)
+Email notifications (async)
+Scheduled embeddings refresh (daily at 2 AM)
+
+Task priorities:
+
+High: Approval notifications, critical alerts
+Medium: Clause additions, contract updates
+Low: Analytics, batch processing
+
+
+Frontend Optimization:
+
+Lazy load clause text (load on preview)
+Virtual scrolling for long lists
+Debounced search (300ms)
+Optimistic UI updates
+Code splitting by route
+Image/asset lazy loading
+Service worker for offline capability
+
+
+
+-------------------------------------------------------------------------------
+PART 9: TESTING STRATEGY
+-------------------------------------------------------------------------------
+COMPREHENSIVE TEST SUITE:
+
+Unit Tests (pytest):
+
+Embedding service: Test embedding generation, caching
+Search service: Test semantic search, filtering, ranking
+RAG service: Test context understanding, suggestion quality
+Workflow engine: Test state transitions, validations
+Clause compatibility: Test conflict detection
+
+Coverage target: >85%
+Integration Tests:
+
+API endpoints with test database
+Workflow approval flow end-to-end
+Contract drafting flow
+AI suggestion accuracy (golden dataset)
+Database transactions and rollbacks
+
+
+Frontend Tests (Jest + React Testing Library):
+
+Component rendering tests
+User interaction flows
+Form validation
+State management
+API integration mocks
+
+
+Performance Tests (Locust):
+
+Load test: 100 concurrent users drafting contracts
+Stress test: 500 semantic searches per second
+Database query performance benchmarks
+Vector search latency (target: <200ms for 10k clause library)
+
+
+Security Tests:
+
+OWASP Top 10 vulnerability scanning
+SQL injection attempts
+XSS prevention validation
+Authentication/authorization bypass tests
+CSRF token validation
+
+
+
+-------------------------------------------------------------------------------
+PART 10: DEPLOYMENT & MONITORING
+-------------------------------------------------------------------------------
+PRODUCTION DEPLOYMENT:
+
+Infrastructure:
+
+Docker containerization
+Kubernetes deployment (if scaling needed)
+PostgreSQL with pgvector extension
+Redis cluster for caching
+Celery workers (3+ instances)
+Load balancer (Nginx)
+
+
+Environment Variables:
+
+DATABASE_URL
+REDIS_URL
+OPENAI_API_KEY or ANTHROPIC_API_KEY
+JWT_SECRET_KEY
+VECTOR_DB_CONFIG
+SMTP_CONFIG (for notifications)
+STORAGE_BUCKET (for documents)
+
+
+Monitoring:
+
+Application Performance Monitoring (New Relic/Datadog)
+Error tracking (Sentry)
+Database query performance (pg_stat_statements)
+AI/RAG metrics:
+
+Suggestion acceptance rate
+Average similarity scores
+Response times for semantic search
+
+
+User analytics (Mixpanel/Amplitude)
+
+
+Alerting:
+
+API error rate >5%
+Search latency >500ms
+Approval workflow stuck >7 days
+Database connection pool exhaustion
+Celery task queue backlog >1000
+
+
+Backup & Disaster Recovery:
+
+Automated daily database backups
+Point-in-time recovery capability
+Weekly full system snapshots
+Offsite backup storage
+Recovery time objective: 4 hours
+Recovery point objective: 1 hour
+
+
+
+-------------------------------------------------------------------------------
+PART 11: USER DOCUMENTATION
+-------------------------------------------------------------------------------
+CREATE COMPREHENSIVE DOCUMENTATION:
+
+User Guide:
+
+Getting started with contract drafting
+How to search the clause library
+Understanding AI suggestions
+Working with templates
+Variable management
+Approval workflow guide
+Best practices for clause organization
+
+
+Admin Guide:
+
+User and role management
+Configuring approval workflows
+Managing clause categories
+Template administration
+System configuration
+Monitoring and analytics
+
+
+API Documentation:
+
+OpenAPI/Swagger specification
+Authentication guide
+Endpoint reference
+Example requests/responses
+Rate limiting information
+Webhook integration
+
+
+Video Tutorials:
+
+Drafting your first contract (5 min)
+Advanced clause search techniques (7 min)
+Creating and managing templates (10 min)
+Understanding the approval process (6 min)
+
+
+
+-------------------------------------------------------------------------------
+PART 12: FUTURE ENHANCEMENTS (V2 ROADMAP)
+-------------------------------------------------------------------------------
+PLANNED FEATURES:
+
+Advanced AI Capabilities:
+
+Clause risk scoring using ML
+Automated contract analysis and summarization
+Predictive analytics for clause effectiveness
+Multi-language support with translation
+
+
+Collaboration Features:
+
+Real-time collaborative editing (like Google Docs)
+Video conferencing integration for contract review
+Shared workspaces for contract teams
+@mentions and notifications
+
+
+Integration Ecosystem:
+
+Salesforce integration for opportunity-to-contract
+E-signature platforms (DocuSign, Adobe Sign)
+Document management systems (SharePoint, Box)
+ERP systems for financial data
+Slack/Teams notifications
+
+
+Advanced Analytics:
+
+Contract portfolio analysis
+Compliance risk dashboards
+Vendor performance tracking
+Predictive contract renewal insights
+
+
+Mobile Application:
+
+iOS/Android apps for contract review
+Offline mode for clause library access
+Push notifications for approvals
+Mobile-optimized signature workflow
+
+
+
+-------------------------------------------------------------------------------
+IMPLEMENTATION CHECKLIST
+-------------------------------------------------------------------------------
+Phase 1 (Weeks 1-4): Foundation
+? Database schema implementation
+? Basic CRUD APIs for clauses and contracts
+? User authentication and RBAC
+? Basic UI for clause library
+Phase 2 (Weeks 5-8): AI/RAG Core
+? Embedding generation pipeline
+? Semantic search implementation
+? Basic RAG suggestion engine
+? Integration with LLM API
+Phase 3 (Weeks 9-12): Contract Drafting
+? Template system
+? Contract drafting UI
+? Variable management
+? Clause compatibility validation
+Phase 4 (Weeks 13-16): Workflow & Approvals
+? Approval workflow engine
+? Notification system
+? Approval dashboard UI
+? Audit logging
+Phase 5 (Weeks 17-20): Polish & Optimization
+? Performance optimization
+? Security hardening
+? Comprehensive testing
+? Documentation
+? User training
+Phase 6 (Weeks 21-24): Deployment & Monitoring
+? Production deployment
+? Monitoring setup
+? User acceptance testing
+? Bug fixes and refinements
+? Go-live preparation
+-------------------------------------------------------------------------------
+END OF PROMPT
+-------------------------------------------------------------------------------
