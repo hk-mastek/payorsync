@@ -7,7 +7,8 @@ import { registerImageRoutes } from "./replit_integrations/image";
 import OpenAI from "openai";
 import multer from "multer";
 const require = createRequire(import.meta.url);
-const pdfParse = require("pdf-parse");
+const pdfParseModule = require("pdf-parse");
+const pdfParse = pdfParseModule.default || pdfParseModule;
 import { 
   insertClauseTemplateSchema, 
   insertClauseCategorySchema,
