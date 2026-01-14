@@ -1,0 +1,868 @@
+Build an advanced PDF contract upload and clause extraction system with AI-powered clause analysis and negotiation workflow:
+
+═══════════════════════════════════════════════════════════════════════════════
+PART 1: ARCHITECTURE & TECHNOLOGY STACK
+═══════════════════════════════════════════════════════════════════════════════
+
+BACKEND TECHNOLOGIES:
+- Python 3.11+ with FastAPI
+- PDF Processing: PyMuPDF (fitz) or pdfplumber for text extraction
+- OCR: Tesseract with pytesseract for scanned PDFs
+- Document AI: Claude API or GPT-4 Vision for intelligent clause identification
+- Table Extraction: Camelot or Tabula for structured data
+- PostgreSQL for storage
+- Redis for task queuing and caching
+- Celery for background processing
+
+FRONTEND TECHNOLOGIES:
+- React 18+ with TypeScript
+- React PDF Viewer (@react-pdf/renderer or react-pdf)
+- Split-pane layout (react-split-pane)
+- Drag-and-drop upload (react-dropzone)
+- Rich text diff viewer (react-diff-viewer)
+- shadcn/ui or Material-UI components
+
+═══════════════════════════════════════════════════════════════════════════════
+PART 2: DATABASE SCHEMA EXTENSIONS
+═══════════════════════════════════════════════════════════════════════════════
+
+ADD NEW TABLES FOR PDF PROCESSING:
+
+1. uploaded_contracts (
+     id UUID PRIMARY KEY,
+     original_filename VARCHAR(500) NOT NULL,
+     file_path TEXT NOT NULL,
+     file_size BIGINT,
+     mime_type VARCHAR(100),
+     
+     -- Upload metadata
+     uploaded_by UUID REFERENCES users(id),
+     uploaded_at TIMESTAMP DEFAULT NOW(),
+     
+     -- Contract identification
+     contract_id UUID REFERENCES contracts(id), -- Links to existing contract if applicable
+     payor_name VARCHAR(300),
+     payor_id UUID REFERENCES payors(id),
+     contract_number VARCHAR(100),
+     effective_date DATE,
+     termination_date DATE,
+     
+     -- Processing status
+     processing_status VARCHAR(50) DEFAULT 'pending', -- pending, processing, completed, failed
+     extraction_method VARCHAR(50), -- 'text_extraction', 'ocr', 'ai_vision'
+     
+     -- PDF characteristics
+     total_pages INTEGER,
+     is_scanned BOOLEAN DEFAULT false,
+     has_searchable_text BOOLEAN,
+     document_quality_score DECIMAL(3,2), -- 0.00 to 1.00
+     
+     -- Processing results
+     extracted_text TEXT,
+     extraction_confidence DECIMAL(5,2), -- Overall confidence 0-100
+     total_clauses_extracted INTEGER,
+     
+     -- Error handling
+     error_message TEXT,
+     retry_count INTEGER DEFAULT 0,
+     
+     completed_at TIMESTAMP,
+     
+     metadata JSONB, -- Additional extracted metadata
+     /*
+     {
+       "document_type": "Master Services Agreement",
+       "parties": ["Humana Inc.", "ABC Dialysis Centers"],
+       "detected_sections": ["Definitions", "Reimbursement", "Term"],
+       "language": "en",
+       "signature_detected": true
+     }
+     */
+   )
+   -- Indexes: uploaded_by, processing_status, uploaded_at, contract_id
+
+2. extracted_clauses (
+     id UUID PRIMARY KEY,
+     uploaded_contract_id UUID REFERENCES uploaded_contracts(id) ON DELETE CASCADE,
+     
+     -- Clause identification
+     clause_number VARCHAR(50), -- e.g., "Section 4.2.1"
+     clause_title VARCHAR(500),
+     clause_text TEXT NOT NULL,
+     
+     -- Position in document
+     page_number INTEGER,
+     section_name VARCHAR(200),
+     subsection_name VARCHAR(200),
+     position_order INTEGER, -- Sequential order in document
+     
+     -- Bounding box coordinates for PDF highlighting
+     bounding_boxes JSONB, -- Array of {page, x1, y1, x2, y2}
+     /*
+     [
+       {"page": 5, "x1": 72, "y1": 400, "x2": 540, "y2": 450}
+     ]
+     */
+     
+     -- AI Analysis
+     clause_category VARCHAR(200), -- Auto-detected: "reimbursement", "termination", etc.
+     clause_type VARCHAR(100), -- "payment_terms", "liability", "indemnification"
+     extraction_confidence DECIMAL(5,2), -- 0-100
+     
+     -- Semantic matching
+     embedding_vector VECTOR(384), -- For matching against clause library
+     matched_library_clause_id UUID REFERENCES clause_templates(id),
+     similarity_score DECIMAL(5,4), -- Similarity to matched clause
+     
+     -- Comparison analysis
+     comparison_status VARCHAR(50), -- 'favorable', 'standard', 'unfavorable', 'needs_review'
+     risk_level VARCHAR(20), -- 'low', 'medium', 'high', 'critical'
+     variance_detected BOOLEAN DEFAULT false,
+     variance_description TEXT,
+     
+     -- AI-generated insights
+     ai_summary TEXT, -- Plain-language summary
+     ai_concerns TEXT[], -- Array of potential concerns
+     ai_recommendations TEXT[], -- Suggested modifications
+     
+     -- Negotiation workflow
+     review_status VARCHAR(50) DEFAULT 'pending', -- pending, accepted, negotiate, rejected, modified
+     reviewed_by UUID REFERENCES users(id),
+     reviewed_at TIMESTAMP,
+     
+     -- Negotiation details
+     negotiation_status VARCHAR(50), -- 'not_started', 'in_progress', 'resolved', 'escalated'
+     negotiation_priority VARCHAR(20), -- 'low', 'medium', 'high', 'critical'
+     assigned_to UUID REFERENCES users(id),
+     
+     negotiation_notes TEXT,
+     proposed_modification TEXT, -- Analyst's proposed alternative text
+     
+     -- Tracking
+     created_at TIMESTAMP DEFAULT NOW(),
+     updated_at TIMESTAMP DEFAULT NOW()
+   )
+   -- Indexes: uploaded_contract_id, review_status, negotiation_status, clause_category
+
+3. clause_comparisons (
+     id UUID PRIMARY KEY,
+     extracted_clause_id UUID REFERENCES extracted_clauses(id),
+     library_clause_id UUID REFERENCES clause_templates(id),
+     
+     -- Comparison metrics
+     text_similarity_score DECIMAL(5,4), -- 0-1
+     semantic_similarity_score DECIMAL(5,4), -- 0-1
+     
+     -- Difference analysis
+     key_differences JSONB, -- Structured differences
+     /*
+     {
+       "reimbursement_rate": {
+         "extracted": "145% of Medicare",
+         "library_standard": "150% of Medicare",
+         "variance": "-5%",
+         "impact": "medium"
+       },
+       "timely_filing": {
+         "extracted": "180 days",
+         "library_standard": "365 days",
+         "variance": "-185 days",
+         "impact": "high"
+       }
+     }
+     */
+     
+     favorable_points TEXT[], -- Where extracted clause is better
+     unfavorable_points TEXT[], -- Where extracted clause is worse
+     missing_protections TEXT[], -- Protections in library but not in extracted
+     
+     overall_assessment VARCHAR(50), -- 'acceptable', 'needs_negotiation', 'reject'
+     
+     created_at TIMESTAMP DEFAULT NOW()
+   )
+
+4. negotiation_threads (
+     id UUID PRIMARY KEY,
+     extracted_clause_id UUID REFERENCES extracted_clauses(id),
+     
+     thread_status VARCHAR(50) DEFAULT 'open', -- open, in_progress, resolved, closed
+     priority VARCHAR(20),
+     
+     created_by UUID REFERENCES users(id),
+     assigned_to UUID REFERENCES users(id),
+     
+     target_resolution_date DATE,
+     
+     created_at TIMESTAMP DEFAULT NOW(),
+     resolved_at TIMESTAMP
+   )
+
+5. negotiation_messages (
+     id UUID PRIMARY KEY,
+     thread_id UUID REFERENCES negotiation_threads(id) ON DELETE CASCADE,
+     
+     message_type VARCHAR(50), -- 'comment', 'proposed_change', 'counter_proposal', 'approval', 'rejection'
+     message_text TEXT NOT NULL,
+     
+     proposed_clause_text TEXT, -- If proposing alternative text
+     
+     -- Attachments
+     attachments JSONB, -- Array of file references
+     
+     -- AI assistance
+     ai_generated BOOLEAN DEFAULT false,
+     ai_rationale TEXT,
+     
+     created_by UUID REFERENCES users(id),
+     created_at TIMESTAMP DEFAULT NOW(),
+     
+     -- Visibility
+     is_internal BOOLEAN DEFAULT false, -- Internal notes vs. external communication
+     recipients UUID[] -- For notifications
+   )
+
+6. pdf_processing_logs (
+     id UUID PRIMARY KEY,
+     uploaded_contract_id UUID REFERENCES uploaded_contracts(id),
+     
+     processing_stage VARCHAR(100), -- 'upload', 'text_extraction', 'ocr', 'clause_identification', 'ai_analysis', 'semantic_matching'
+     status VARCHAR(50), -- 'started', 'completed', 'failed'
+     
+     details JSONB,
+     error_message TEXT,
+     
+     started_at TIMESTAMP,
+     completed_at TIMESTAMP,
+     duration_seconds INTEGER
+   )
+
+═══════════════════════════════════════════════════════════════════════════════
+PART 3: PDF PROCESSING ENGINE
+═══════════════════════════════════════════════════════════════════════════════
+
+File: services/pdf_processor.py
+
+Class: PDFContractProcessor
+
+CORE METHODS:
+
+1. async def process_uploaded_pdf(
+     file_path: str,
+     uploaded_contract_id: UUID,
+     user_id: UUID
+   ) -> ProcessingResult:
+   """
+   Main orchestration method for PDF processing pipeline
+   """
+   
+   ALGORITHM:
+   
+   Step 1: PDF Analysis & Validation
+   ──────────────────────────────────
+   - Validate file is actually a PDF
+   - Check file size (limit: 50MB)
+   - Scan for malware/viruses
+   - Count total pages
+   - Determine if scanned or text-based
+   - Calculate document quality score
+   
+   Code:
+```python
+   import fitz  # PyMuPDF
+   
+   pdf_document = fitz.open(file_path)
+   total_pages = pdf_document.page_count
+   
+   # Check if searchable text exists
+   sample_text = pdf_document[0].get_text()
+   has_searchable_text = len(sample_text.strip()) > 100
+   is_scanned = not has_searchable_text
+   
+   # Update database
+   await update_uploaded_contract(
+       uploaded_contract_id,
+       total_pages=total_pages,
+       is_scanned=is_scanned,
+       has_searchable_text=has_searchable_text,
+       processing_status='processing'
+   )
+```
+   
+   Step 2: Text Extraction
+   ───────────────────────
+   - If text-based PDF: Use PyMuPDF text extraction
+   - If scanned: Use OCR (Tesseract)
+   - Preserve layout and structure
+   - Extract text with positional information
+   
+   Code:
+```python
+   if has_searchable_text:
+       extraction_method = 'text_extraction'
+       extracted_text = ""
+       page_texts = []
+       
+       for page_num, page in enumerate(pdf_document):
+           # Get text with position info
+           text_blocks = page.get_text("blocks")  # Returns (x0, y0, x1, y1, text, block_no, block_type)
+           page_text = page.get_text()
+           page_texts.append({
+               'page_number': page_num + 1,
+               'text': page_text,
+               'blocks': text_blocks
+           })
+           extracted_text += f"\n--- Page {page_num + 1} ---\n{page_text}"
+   
+   else:
+       extraction_method = 'ocr'
+       import pytesseract
+       from pdf2image import convert_from_path
+       
+       images = convert_from_path(file_path)
+       extracted_text = ""
+       page_texts = []
+       
+       for i, image in enumerate(images):
+           # OCR with position data
+           ocr_data = pytesseract.image_to_data(image, output_type=pytesseract.Output.DICT)
+           page_text = pytesseract.image_to_string(image)
+           
+           page_texts.append({
+               'page_number': i + 1,
+               'text': page_text,
+               'ocr_confidence': calculate_avg_confidence(ocr_data),
+               'blocks': extract_blocks_from_ocr(ocr_data)
+           })
+           extracted_text += f"\n--- Page {i + 1} ---\n{page_text}"
+   
+   # Store extracted text
+   await update_uploaded_contract(
+       uploaded_contract_id,
+       extracted_text=extracted_text,
+       extraction_method=extraction_method
+   )
+```
+   
+   Step 3: Document Structure Analysis
+   ────────────────────────────────────
+   - Identify document type (MSA, SOW, Amendment, etc.)
+   - Detect parties involved
+   - Find contract metadata (dates, numbers)
+   - Identify major sections
+   
+   Code:
+```python
+   async def analyze_document_structure(extracted_text: str) -> dict:
+       """
+       Use AI to understand document structure
+       """
+       prompt = f"""
+       Analyze this contract document and extract:
+       
+       1. Document type (e.g., Master Services Agreement, Statement of Work)
+       2. Parties involved (full legal names)
+       3. Contract number/identifier
+       4. Effective date and termination date
+       5. Major sections (return as list with section numbers and titles)
+       6. Language of the document
+       7. Whether signatures are present
+       
+       Return as JSON with keys: document_type, parties, contract_number, 
+       effective_date, termination_date, sections, language, has_signatures
+       
+       Contract Text:
+       {extracted_text[:8000]}  # Send first portion for metadata
+       """
+       
+       response = await call_claude_api(
+           messages=[{"role": "user", "content": prompt}],
+           model="claude-sonnet-4-20250514",
+           max_tokens=2000
+       )
+       
+       # Parse JSON response
+       metadata = json.loads(extract_json_from_response(response))
+       
+       return metadata
+   
+   metadata = await analyze_document_structure(extracted_text)
+   
+   # Update database with metadata
+   await update_uploaded_contract(
+       uploaded_contract_id,
+       payor_name=extract_counterparty_name(metadata['parties']),
+       contract_number=metadata.get('contract_number'),
+       effective_date=parse_date(metadata.get('effective_date')),
+       termination_date=parse_date(metadata.get('termination_date')),
+       metadata=metadata
+   )
+```
+   
+   Step 4: Intelligent Clause Extraction
+   ──────────────────────────────────────
+   - Use AI to identify individual clauses
+   - Extract clause numbers, titles, and text
+   - Determine clause boundaries
+   - Categorize each clause
+   
+   Code:
+```python
+   async def extract_clauses_with_ai(
+       full_text: str,
+       page_texts: list,
+       sections: list
+   ) -> List[dict]:
+       """
+       Use AI to intelligently extract clauses with context
+       """
+       
+       clauses = []
+       
+       # Process in chunks to handle long documents
+       chunk_size = 6000  # tokens
+       text_chunks = split_text_into_chunks(full_text, chunk_size)
+       
+       for chunk_idx, chunk in enumerate(text_chunks):
+           prompt = f"""
+           You are a legal document analysis expert. Extract all contractual clauses from this section of a healthcare payor contract.
+           
+           For each clause, provide:
+           1. Clause number/identifier (e.g., "4.2.1", "Section 7(a)")
+           2. Clause title/subject
+           3. Full clause text (verbatim)
+           4. Clause category (select from: reimbursement_methodology, payment_terms, timely_filing, 
+              authorization_requirements, drug_pricing, term_termination, liability, indemnification, 
+              confidentiality, compliance, dispute_resolution, definitions, general_provisions, other)
+           5. Page number where clause starts
+           
+           Return as JSON array with objects containing: clause_number, title, text, category, page_number
+           
+           Contract Section:
+           {chunk}
+           
+           IMPORTANT: Extract complete clause text including all sub-clauses and subsections.
+           """
+           
+           response = await call_claude_api(
+               messages=[{"role": "user", "content": prompt}],
+               model="claude-sonnet-4-20250514",
+               max_tokens=4000
+           )
+           
+           chunk_clauses = json.loads(extract_json_from_response(response))
+           
+           # Enrich with position data
+           for clause in chunk_clauses:
+               # Find bounding boxes in original PDF
+               bounding_boxes = find_text_positions(
+                   clause['text'],
+                   page_texts,
+                   clause.get('page_number')
+               )
+               
+               clause['bounding_boxes'] = bounding_boxes
+               clause['position_order'] = len(clauses) + 1
+           
+           clauses.extend(chunk_clauses)
+       
+       return clauses
+   
+   extracted_clauses = await extract_clauses_with_ai(
+       extracted_text,
+       page_texts,
+       metadata['sections']
+   )
+```
+   
+   Step 5: Clause Categorization & Analysis
+   ─────────────────────────────────────────
+   - Generate embeddings for each clause
+   - Match against clause library
+   - Perform comparative analysis
+   - Assess risk levels
+   
+   Code:
+```python
+   async def analyze_extracted_clause(
+       clause_text: str,
+       clause_category: str,
+       contract_context: dict
+   ) -> dict:
+       """
+       Deep analysis of individual clause
+       """
+       
+       # Generate embedding
+       embedding = await generate_embedding(clause_text)
+       
+       # Find most similar clause in library
+       similar_clauses = await semantic_search_clause_library(
+           embedding=embedding,
+           category=clause_category,
+           payor_type=contract_context.get('payor_type'),
+           top_k=3
+       )
+       
+       best_match = similar_clauses[0] if similar_clauses else None
+       
+       # Perform detailed comparison if match found
+       comparison = None
+       if best_match and best_match['similarity_score'] > 0.70:
+           comparison = await compare_clauses(
+               extracted_clause_text=clause_text,
+               library_clause_id=best_match['clause_id'],
+               library_clause_text=best_match['clause_text']
+           )
+       
+       # AI-powered clause analysis
+       analysis_prompt = f"""
+       Analyze this contract clause from a {contract_context.get('payor_type', 'commercial')} healthcare payor contract:
+       
+       CLAUSE TEXT:
+       {clause_text}
+       
+       CLAUSE CATEGORY: {clause_category}
+       
+       Provide:
+       1. A concise summary (2-3 sentences) in plain language
+       2. Risk assessment (low/medium/high/critical) with brief justification
+       3. Key concerns or red flags (list up to 3)
+       4. Recommendations for negotiation (list up to 3)
+       5. Whether this clause is favorable, standard, or unfavorable compared to industry norms
+       
+       Return as JSON: {{"summary": "", "risk_level": "", "risk_justification": "", 
+                         "concerns": [], "recommendations": [], "comparison_status": ""}}
+       """
+       
+       analysis_response = await call_claude_api(
+           messages=[{"role": "user", "content": analysis_prompt}],
+           model="claude-sonnet-4-20250514",
+           max_tokens=1500
+       )
+       
+       analysis = json.loads(extract_json_from_response(analysis_response))
+       
+       return {
+           'embedding': embedding,
+           'matched_library_clause_id': best_match['clause_id'] if best_match else None,
+           'similarity_score': best_match['similarity_score'] if best_match else 0.0,
+           'comparison': comparison,
+           'ai_summary': analysis['summary'],
+           'risk_level': analysis['risk_level'],
+           'ai_concerns': analysis['concerns'],
+           'ai_recommendations': analysis['recommendations'],
+           'comparison_status': analysis['comparison_status']
+       }
+   
+   # Process all extracted clauses
+   contract_context = {
+       'payor_type': determine_payor_type(metadata),
+       'jurisdiction': extract_jurisdiction(metadata)
+   }
+   
+   for clause in extracted_clauses:
+       analysis = await analyze_extracted_clause(
+           clause_text=clause['text'],
+           clause_category=clause['category'],
+           contract_context=contract_context
+       )
+       
+       # Save to database
+       await create_extracted_clause(
+           uploaded_contract_id=uploaded_contract_id,
+           clause_number=clause.get('clause_number'),
+           clause_title=clause.get('title'),
+           clause_text=clause['text'],
+           page_number=clause.get('page_number'),
+           clause_category=clause['category'],
+           bounding_boxes=clause.get('bounding_boxes'),
+           position_order=clause['position_order'],
+           embedding_vector=analysis['embedding'],
+           matched_library_clause_id=analysis['matched_library_clause_id'],
+           similarity_score=analysis['similarity_score'],
+           comparison_status=analysis['comparison_status'],
+           risk_level=analysis['risk_level'],
+           ai_summary=analysis['ai_summary'],
+           ai_concerns=analysis['ai_concerns'],
+           ai_recommendations=analysis['ai_recommendations']
+       )
+   
+   # Update contract with completion status
+   await update_uploaded_contract(
+       uploaded_contract_id,
+       processing_status='completed',
+       total_clauses_extracted=len(extracted_clauses),
+       completed_at=datetime.now()
+   )
+```
+
+2. async def compare_clauses(
+     extracted_clause_text: str,
+     library_clause_id: UUID,
+     library_clause_text: str
+   ) -> dict:
+   """
+   Detailed comparison between extracted clause and library standard
+   """
+   
+   prompt = f"""
+   Compare these two contract clauses and identify key differences:
+   
+   EXTRACTED CLAUSE (from uploaded contract):
+   {extracted_clause_text}
+   
+   STANDARD LIBRARY CLAUSE (our preferred language):
+   {library_clause_text}
+   
+   Analyze:
+   1. Text similarity (0-100%)
+   2. Key differences (be specific about values, terms, conditions)
+   3. Points where extracted clause is MORE favorable to us
+   4. Points where extracted clause is LESS favorable to us
+   5. Critical protections present in library clause but missing in extracted clause
+   6. Overall assessment: acceptable / needs_negotiation / reject
+   
+   Return as JSON with keys: text_similarity_pct, key_differences (array of objects with 
+   'aspect', 'extracted_value', 'library_value', 'variance', 'impact'), 
+   favorable_points (array), unfavorable_points (array), missing_protections (array), 
+   overall_assessment
+   """
+   
+   response = await call_claude_api(
+       messages=[{"role": "user", "content": prompt}],
+       model="claude-sonnet-4-20250514",
+       max_tokens=2500
+   )
+   
+   comparison = json.loads(extract_json_from_response(response))
+   
+   # Store comparison in database
+   await create_clause_comparison(
+       extracted_clause_id=extracted_clause_id,
+       library_clause_id=library_clause_id,
+       text_similarity_score=comparison['text_similarity_pct'] / 100,
+       key_differences=comparison['key_differences'],
+       favorable_points=comparison['favorable_points'],
+       unfavorable_points=comparison['unfavorable_points'],
+       missing_protections=comparison['missing_protections'],
+       overall_assessment=comparison['overall_assessment']
+   )
+   
+   return comparison
+
+3. def find_text_positions(
+     search_text: str,
+     page_texts: list,
+     expected_page: int = None
+   ) -> List[dict]:
+   """
+   Find bounding box coordinates for text in PDF
+   For highlighting in the viewer
+   """
+   
+   bounding_boxes = []
+   
+   # Clean and normalize search text
+   search_text_clean = ' '.join(search_text.split())
+   
+   # Search in expected page first, then others
+   pages_to_search = [expected_page] if expected_page else range(1, len(page_texts) + 1)
+   
+   for page_info in page_texts:
+       if page_info['page_number'] not in pages_to_search:
+           continue
+       
+       # Search through blocks
+       for block in page_info.get('blocks', []):
+           if isinstance(block, (list, tuple)) and len(block) >= 5:
+               x0, y0, x1, y1, block_text = block[:5]
+               block_text_clean = ' '.join(block_text.split())
+               
+               # Check if search text is in this block
+               if search_text_clean[:100] in block_text_clean or \
+                  block_text_clean in search_text_clean:
+                   bounding_boxes.append({
+                       'page': page_info['page_number'],
+                       'x1': float(x0),
+                       'y1': float(y0),
+                       'x2': float(x1),
+                       'y2': float(y1)
+                   })
+   
+   return bounding_boxes
+
+4. HELPER FUNCTIONS:
+
+def calculate_avg_confidence(ocr_data: dict) -> float:
+    """Calculate average OCR confidence score"""
+    confidences = [float(conf) for conf in ocr_data['conf'] if conf != '-1']
+    return sum(confidences) / len(confidences) if confidences else 0.0
+
+def extract_json_from_response(response: str) -> str:
+    """Extract JSON from Claude response, handling markdown code blocks"""
+    # Remove ```json and ``` if present
+    json_str = response.strip()
+    if json_str.startswith('```json'):
+        json_str = json_str[7:]
+    if json_str.startswith('```'):
+        json_str = json_str[3:]
+    if json_str.endswith('```'):
+        json_str = json_str[:-3]
+    return json_str.strip()
+
+def split_text_into_chunks(text: str, chunk_size: int) -> List[str]:
+    """Split long text into processable chunks"""
+    # Smart splitting on section boundaries
+    sections = re.split(r'\n\s*(?:SECTION|Section|ARTICLE|Article)\s+\d+', text)
+    
+    chunks = []
+    current_chunk = ""
+    
+    for section in sections:
+        if len(current_chunk) + len(section) < chunk_size:
+            current_chunk += section
+        else:
+            if current_chunk:
+                chunks.append(current_chunk)
+            current_chunk = section
+    
+    if current_chunk:
+        chunks.append(current_chunk)
+    
+    return chunks
+
+═══════════════════════════════════════════════════════════════════════════════
+PART 4: API ENDPOINTS
+═══════════════════════════════════════════════════════════════════════════════
+
+File: routes/pdf_upload_routes.py
+
+from fastapi import APIRouter, UploadFile, File, BackgroundTasks, HTTPException
+from fastapi.responses import JSONResponse
+
+router = APIRouter(prefix="/api/pdf", tags=["PDF Upload"])
+
+@router.post("/upload")
+async def upload_contract_pdf(
+    file: UploadFile = File(...),
+    payor_id: Optional[UUID] = None,
+    contract_id: Optional[UUID] = None,
+    background_tasks: BackgroundTasks = None,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Upload a PDF contract for processing
+    
+    Returns immediately with upload ID
+    Processing happens in background
+    """
+    
+    # Validation
+    if not file.filename.endswith('.pdf'):
+        raise HTTPException(status_code=400, detail="Only PDF files are allowed")
+    
+    if file.size > 50 * 1024 * 1024:  # 50MB limit
+        raise HTTPException(status_code=400, detail="File size exceeds 50MB limit")
+    
+    # Generate unique filename
+    file_id = uuid.uuid4()
+    file_extension = Path(file.filename).suffix
+    stored_filename = f"{file_id}{file_extension}"
+    file_path = f"uploads/contracts/{stored_filename}"
+    
+    # Save file
+    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+    
+    # Create database record
+    uploaded_contract = await create_uploaded_contract(
+        original_filename=file.filename,
+        file_path=file_path,
+        file_size=file.size,
+        mime_type=file.content_type,
+        uploaded_by=current_user.id,
+        payor_id=payor_id,
+        contract_id=contract_id,
+        processing_status='pending'
+    )
+    
+    # Queue background processing
+    background_tasks.add_task(
+        process_uploaded_pdf,
+        file_path=file_path,
+        uploaded_contract_id=uploaded_contract.id,
+        user_id=current_user.id
+    )
+    
+    return {
+        "upload_id": uploaded_contract.id,
+        "status": "processing",
+        "message": "PDF upload successful. Processing has started."
+    }
+
+
+@router.get("/upload/{upload_id}/status")
+async def get_processing_status(
+    upload_id: UUID,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Check processing status of uploaded PDF
+    """
+    
+    uploaded_contract = await get_uploaded_contract(upload_id)
+    
+    if not uploaded_contract:
+        raise HTTPException(status_code=404, detail="Upload not found")
+    
+    # Check authorization
+    if uploaded_contract.uploaded_by != current_user.id and not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    response = {
+        "upload_id": uploaded_contract.id,
+        "filename": uploaded_contract.original_filename,
+        "status": uploaded_contract.processing_status,
+        "total_pages": uploaded_contract.total_pages,
+        "total_clauses_extracted": uploaded_contract.total_clauses_extracted,
+        "uploaded_at": uploaded_contract.uploaded_at,
+        "completed_at": uploaded_contract.completed_at
+    }
+    
+    if uploaded_contract.processing_status == 'failed':
+        response['error'] = uploaded_contract.error_message
+    
+    if uploaded_contract.processing_status == 'completed':
+        response['metadata'] = uploaded_contract.metadata
+        response['clauses_url'] = f"/api/pdf/upload/{upload_id}/clauses"
+    
+    return response
+
+
+@router.get("/upload/{upload_id}/clauses")
+async def get_extracted_clauses(
+    upload_id: UUID,
+    review_status: Optional[str] = None,
+    risk_level: Optional[str] = None,
+    category: Optional[str] = None,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get all extracted clauses from uploaded PDF
+    
+    With filtering options for review workflow
+    """
+    
+    uploaded_contract = await get_uploaded_contract(upload_id)
+    
+    if not uploaded_contract:
+        raise HTTPException(status_code=404, detail="Upload not found")
+    
+    # Build query filters
+    filters = {'uploaded_contract_id': upload_id}
+    if review_status:
+        filters['review_status'] = review_status
+    if risk_level:
+        filters['risk_level'] = risk_level
+    if category
