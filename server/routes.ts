@@ -322,15 +322,10 @@ Return JSON array with top 3 recommendations in this format:
         const uint8Array = new Uint8Array(req.file.buffer);
         const parser = new PDFParse(uint8Array);
         await parser.load();
-        const info = await parser.getInfo();
-        const pageCount = info.pages || 0;
-        // Extract text from all pages
-        const textPromises = [];
-        for (let i = 0; i < pageCount; i++) {
-          textPromises.push(parser.getPageText(i));
-        }
-        const pageTexts = await Promise.all(textPromises);
-        extractedText = pageTexts.join("\n\n");
+        // Use getText() method which returns a TextResult object
+        const textResult = await parser.getText();
+        extractedText = textResult.text || "";
+        console.log("PDF text extracted, length:", extractedText.length);
       } catch (pdfError) {
         console.error("PDF parsing error:", pdfError);
         await storage.updateContractUpload(uploadRecord.id, {
