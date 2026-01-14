@@ -1,5 +1,5 @@
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -29,28 +29,59 @@ import {
 } from "@/components/ui/sheet";
 import { useQuery } from "@tanstack/react-query";
 
+interface ClauseCategory {
+  id: string;
+  categoryName: string;
+  description: string;
+  displayOrder: number;
+  isActive: boolean;
+}
+
+interface ClauseTemplate {
+  id: string;
+  clauseCode: string;
+  clauseTitle: string;
+  clauseText: string;
+  clauseVersion: string;
+  categoryId: string;
+  status: string;
+  tags: string[];
+  regulatoryReferences: string[];
+  usageCount: number;
+}
+
 export default function ClauseLibrary() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
   // Fetch categories
-  const { data: categories = [] } = useQuery({
+  const { data: categories = [] } = useQuery<ClauseCategory[]>({
     queryKey: ["/api/clause-categories"],
   });
 
-  // Fetch clauses
-  const { data: clauses = [] } = useQuery({
-    queryKey: ["/api/clauses", { categoryId: selectedCategory, search: searchQuery }],
+  // Build URL with query parameters for clauses
+  const buildClausesUrl = () => {
+    const params = new URLSearchParams();
+    if (selectedCategory) params.set("categoryId", selectedCategory);
+    if (searchQuery) params.set("search", searchQuery);
+    const queryString = params.toString();
+    return queryString ? `/api/clauses?${queryString}` : "/api/clauses";
+  };
+
+  // Fetch clauses with filters
+  const { data: clauses = [] } = useQuery<ClauseTemplate[]>({
+    queryKey: [buildClausesUrl()],
   });
 
-  // Calculate category counts
-  const { data: allClauses = [] } = useQuery({
+  // Fetch all clauses for counts
+  const { data: allClauses = [] } = useQuery<ClauseTemplate[]>({
     queryKey: ["/api/clauses"],
   });
 
-  const categoryCounts = categories.map((cat: any) => ({
+  // Calculate category counts
+  const categoryCounts = categories.map((cat) => ({
     ...cat,
-    count: allClauses.filter((c: any) => c.categoryId === cat.id).length,
+    count: allClauses.filter((c) => c.categoryId === cat.id).length,
   }));
 
   return (
@@ -61,7 +92,7 @@ export default function ClauseLibrary() {
             <h1 className="text-3xl font-display font-bold text-foreground">Clause Library</h1>
             <p className="text-muted-foreground mt-1">Manage standard legal clauses, templates, and variables.</p>
           </div>
-          <Button className="gap-2">
+          <Button className="gap-2" data-testid="button-new-clause">
             <Plus className="h-4 w-4" />
             <span>New Clause</span>
           </Button>
@@ -77,6 +108,7 @@ export default function ClauseLibrary() {
               <nav className="space-y-1">
                 <button
                   onClick={() => setSelectedCategory(null)}
+                  data-testid="button-all-clauses"
                   className={cn(
                     "flex items-center justify-between w-full px-3 py-2 text-sm font-medium rounded-md transition-colors",
                     selectedCategory === null 
@@ -93,10 +125,11 @@ export default function ClauseLibrary() {
                   </Badge>
                 </button>
                 
-                {categoryCounts.map((cat: any) => (
+                {categoryCounts.map((cat) => (
                   <button
                     key={cat.id}
                     onClick={() => setSelectedCategory(cat.id)}
+                    data-testid={`button-category-${cat.id}`}
                     className={cn(
                       "flex items-center justify-between w-full px-3 py-2 text-sm font-medium rounded-md transition-colors",
                       selectedCategory === cat.id 
@@ -127,9 +160,10 @@ export default function ClauseLibrary() {
                   className="pl-9 bg-secondary/50 border-transparent focus:bg-background focus:border-input"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
+                  data-testid="input-search-clauses"
                 />
               </div>
-              <Button variant="outline" className="gap-2">
+              <Button variant="outline" className="gap-2" data-testid="button-filters">
                 <Filter className="h-4 w-4" />
                 <span>Filters</span>
               </Button>
@@ -138,15 +172,18 @@ export default function ClauseLibrary() {
             <ScrollArea className="flex-1">
               <div className="p-4 grid gap-4">
                 {clauses.length === 0 ? (
-                  <div className="text-center py-12">
+                  <div className="text-center py-12" data-testid="text-no-clauses">
                     <FileText className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
                     <p className="text-muted-foreground">No clauses found</p>
                   </div>
                 ) : (
-                  clauses.map((clause: any) => (
+                  clauses.map((clause) => (
                     <Sheet key={clause.id}>
                       <SheetTrigger asChild>
-                        <div className="group flex items-start justify-between p-4 rounded-lg border bg-card hover:bg-accent/50 hover:border-primary/20 transition-all cursor-pointer">
+                        <div 
+                          className="group flex items-start justify-between p-4 rounded-lg border bg-card hover:bg-accent/50 hover:border-primary/20 transition-all cursor-pointer"
+                          data-testid={`card-clause-${clause.id}`}
+                        >
                           <div className="flex gap-4">
                             <div className="mt-1 bg-primary/10 p-2 rounded-lg text-primary">
                               <FileText className="h-5 w-5" />
@@ -192,7 +229,7 @@ export default function ClauseLibrary() {
                           <div className="flex items-center gap-2 mb-2">
                              <Badge variant="outline" className="font-mono">{clause.clauseCode}</Badge>
                              <Badge className="bg-primary/10 text-primary hover:bg-primary/20">
-                               {categories.find((c: any) => c.id === clause.categoryId)?.categoryName || 'Uncategorized'}
+                               {categories.find((c) => c.id === clause.categoryId)?.categoryName || 'Uncategorized'}
                              </Badge>
                           </div>
                           <SheetTitle className="text-xl font-display">{clause.clauseTitle}</SheetTitle>
@@ -271,8 +308,8 @@ export default function ClauseLibrary() {
                           )}
 
                           <div className="flex gap-3 pt-4">
-                            <Button className="flex-1">Edit Template</Button>
-                            <Button variant="outline" className="flex-1">View Version History</Button>
+                            <Button className="flex-1" data-testid="button-edit-template">Edit Template</Button>
+                            <Button variant="outline" className="flex-1" data-testid="button-version-history">View Version History</Button>
                           </div>
                         </div>
                       </SheetContent>
