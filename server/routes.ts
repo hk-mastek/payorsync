@@ -4,14 +4,29 @@ import { storage } from "./storage";
 import { registerChatRoutes } from "./replit_integrations/chat";
 import { registerImageRoutes } from "./replit_integrations/image";
 import OpenAI from "openai";
+import multer from "multer";
+import pdfParse from "pdf-parse";
 import { 
   insertClauseTemplateSchema, 
   insertClauseCategorySchema,
   insertContractSchema,
   insertVarianceSchema,
-  insertPayorSchema
+  insertPayorSchema,
+  type ExtractedClause
 } from "@shared/schema";
 import { fromError } from "zod-validation-error";
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === "application/pdf") {
+      cb(null, true);
+    } else {
+      cb(new Error("Only PDF files are allowed"));
+    }
+  },
+});
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -280,6 +295,222 @@ Return JSON array with top 3 recommendations in this format:
     } catch (error) {
       console.error("Error saving draft:", error);
       res.status(400).json({ error: "Failed to save draft" });
+    }
+  });
+
+  // ===== CONTRACT PDF UPLOAD =====
+  app.post("/api/contracts/upload-pdf", upload.single("pdf"), async (req: Request, res: Response) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "No PDF file provided" });
+      }
+
+      // Create upload record with pending status
+      const uploadRecord = await storage.createContractUpload({
+        fileName: req.file.originalname,
+        originalName: req.file.originalname,
+        fileSize: req.file.size,
+        mimeType: req.file.mimetype,
+        status: "processing",
+      });
+
+      // Extract text from PDF
+      let extractedText = "";
+      try {
+        const pdfData = await pdfParse(req.file.buffer);
+        extractedText = pdfData.text;
+      } catch (pdfError) {
+        console.error("PDF parsing error:", pdfError);
+        await storage.updateContractUpload(uploadRecord.id, {
+          status: "failed",
+          processingError: "Failed to parse PDF file",
+        });
+        return res.status(400).json({ error: "Failed to parse PDF file" });
+      }
+
+      // Use AI to extract clauses from the text
+      const prompt = `You are a legal contract analyst specializing in healthcare payor contracts. Analyze the following contract text and extract all distinct clauses. For each clause, identify:
+1. A short descriptive title
+2. The full clause text
+3. A likely category (e.g., "Reimbursement", "Timely Filing", "Termination", "Definitions", "Compliance", "Appeals", "Authorization")
+4. Any variables or placeholders in the clause (amounts, dates, percentages)
+5. Brief rationale for why this clause is important
+
+Return a JSON object with an array of clauses in this exact format:
+{
+  "clauses": [
+    {
+      "id": "clause-1",
+      "title": "Clause Title",
+      "text": "Full clause text...",
+      "categoryGuess": "Category Name",
+      "rationale": "Why this clause matters",
+      "variables": ["$500", "30 days"]
+    }
+  ]
+}
+
+CONTRACT TEXT:
+${extractedText.substring(0, 30000)}`; // Limit text to avoid token limits
+
+      try {
+        const response = await openai.chat.completions.create({
+          model: "gpt-5.1",
+          messages: [{ role: "user", content: prompt }],
+          response_format: { type: "json_object" },
+          max_completion_tokens: 4000,
+        });
+
+        const result = JSON.parse(response.choices[0]?.message?.content || "{}");
+        const extractedClauses: ExtractedClause[] = (result.clauses || []).map((c: any, i: number) => ({
+          id: c.id || `clause-${i + 1}`,
+          title: c.title || `Clause ${i + 1}`,
+          text: c.text || "",
+          categoryGuess: c.categoryGuess,
+          rationale: c.rationale,
+          variables: c.variables || [],
+        }));
+
+        // Update the upload record with extracted clauses
+        const updated = await storage.updateContractUpload(uploadRecord.id, {
+          extractedText,
+          extractedClauses,
+          status: "completed",
+        });
+
+        res.json(updated);
+      } catch (aiError) {
+        console.error("AI extraction error:", aiError);
+        await storage.updateContractUpload(uploadRecord.id, {
+          extractedText,
+          status: "failed",
+          processingError: "Failed to extract clauses using AI",
+        });
+        return res.status(500).json({ error: "Failed to extract clauses using AI" });
+      }
+    } catch (error) {
+      console.error("Error uploading PDF:", error);
+      res.status(500).json({ error: "Failed to process PDF upload" });
+    }
+  });
+
+  // Get contract upload by ID
+  app.get("/api/contract-uploads/:id", async (req: Request, res: Response) => {
+    try {
+      const upload = await storage.getContractUpload(req.params.id);
+      if (!upload) {
+        return res.status(404).json({ error: "Upload not found" });
+      }
+      res.json(upload);
+    } catch (error) {
+      console.error("Error fetching upload:", error);
+      res.status(500).json({ error: "Failed to fetch upload" });
+    }
+  });
+
+  // Update clause decisions (Accept/Negotiate)
+  app.patch("/api/contract-uploads/:id/decisions", async (req: Request, res: Response) => {
+    try {
+      const { clauseDecisions } = req.body;
+      const updated = await storage.updateContractUpload(req.params.id, {
+        clauseDecisions,
+      });
+      if (!updated) {
+        return res.status(404).json({ error: "Upload not found" });
+      }
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating decisions:", error);
+      res.status(500).json({ error: "Failed to update decisions" });
+    }
+  });
+
+  // Add accepted clauses to library
+  app.post("/api/contract-uploads/:id/add-to-library", async (req: Request, res: Response) => {
+    try {
+      const upload = await storage.getContractUpload(req.params.id);
+      if (!upload) {
+        return res.status(404).json({ error: "Upload not found" });
+      }
+
+      const { clauseIds } = req.body;
+      const extractedClauses = upload.extractedClauses || [];
+      const clausesToAdd = extractedClauses.filter((c: ExtractedClause) => clauseIds.includes(c.id));
+
+      const addedClauses = [];
+      for (const clause of clausesToAdd) {
+        // Generate a unique clause code
+        const clauseCode = `PDF-${Date.now()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+        
+        const newClause = await storage.createClauseTemplate({
+          clauseCode,
+          clauseTitle: clause.title,
+          clauseText: clause.text,
+          clauseVersion: "1.0.0",
+          status: "draft",
+          tags: ["imported", "pdf-upload"],
+        });
+        addedClauses.push(newClause);
+      }
+
+      res.json({ added: addedClauses.length, clauses: addedClauses });
+    } catch (error) {
+      console.error("Error adding to library:", error);
+      res.status(500).json({ error: "Failed to add clauses to library" });
+    }
+  });
+
+  // Generate negotiation letter for negotiate clauses
+  app.post("/api/contract-uploads/:id/negotiation-letter", async (req: Request, res: Response) => {
+    try {
+      const upload = await storage.getContractUpload(req.params.id);
+      if (!upload) {
+        return res.status(404).json({ error: "Upload not found" });
+      }
+
+      const { clauseIds } = req.body;
+      const extractedClauses = upload.extractedClauses || [];
+      const clausesToNegotiate = extractedClauses.filter((c: ExtractedClause) => clauseIds.includes(c.id));
+
+      if (clausesToNegotiate.length === 0) {
+        return res.status(400).json({ error: "No clauses selected for negotiation" });
+      }
+
+      const clauseDetails = clausesToNegotiate.map((c: ExtractedClause, i: number) => 
+        `${i + 1}. ${c.title}\n   Current Text: "${c.text.substring(0, 300)}..."\n   Concern: ${c.rationale || "Standard negotiation point"}`
+      ).join("\n\n");
+
+      const prompt = `You are a healthcare revenue cycle manager drafting a professional negotiation letter to a payor regarding contract terms. Write a formal business letter requesting reconsideration of the following contract clauses.
+
+The letter should:
+1. Be professional and courteous
+2. Clearly identify each clause being negotiated
+3. Explain why each clause is problematic from the provider's perspective
+4. Propose reasonable alternatives
+5. Request a meeting or call to discuss
+
+CLAUSES TO NEGOTIATE:
+${clauseDetails}
+
+Write the complete letter in professional business format.`;
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-5.1",
+        messages: [{ role: "user", content: prompt }],
+        max_completion_tokens: 2000,
+      });
+
+      const letter = response.choices[0]?.message?.content || "";
+
+      // Save the letter to the upload record
+      await storage.updateContractUpload(upload.id, {
+        negotiationLetter: letter,
+      });
+
+      res.json({ letter });
+    } catch (error) {
+      console.error("Error generating letter:", error);
+      res.status(500).json({ error: "Failed to generate negotiation letter" });
     }
   });
 

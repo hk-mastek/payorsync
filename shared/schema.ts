@@ -311,3 +311,53 @@ export const insertAiSuggestionSchema = createInsertSchema(aiSuggestionsLog).omi
 
 export type AiSuggestionLog = typeof aiSuggestionsLog.$inferSelect;
 export type InsertAiSuggestionLog = z.infer<typeof insertAiSuggestionSchema>;
+
+// ===== CONTRACT UPLOADS (PDF extraction) =====
+export const contractUploads = pgTable("contract_uploads", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  fileName: varchar("file_name", { length: 500 }).notNull(),
+  originalName: varchar("original_name", { length: 500 }),
+  fileSize: integer("file_size"),
+  mimeType: varchar("mime_type", { length: 100 }),
+  
+  // Extracted content
+  extractedText: text("extracted_text"),
+  extractedClauses: jsonb("extracted_clauses").$type<ExtractedClause[]>(),
+  
+  // Processing status
+  status: varchar("status", { length: 50 }).default("pending"), // pending, processing, completed, failed
+  processingError: text("processing_error"),
+  
+  // Clause decisions
+  clauseDecisions: jsonb("clause_decisions").$type<ClauseDecision[]>(),
+  negotiationLetter: text("negotiation_letter"),
+  
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+// Type definitions for JSONB fields
+export interface ExtractedClause {
+  id: string;
+  title: string;
+  text: string;
+  categoryGuess?: string;
+  rationale?: string;
+  variables?: string[];
+}
+
+export interface ClauseDecision {
+  clauseId: string;
+  decision: "accept" | "negotiate";
+  negotiationNotes?: string;
+}
+
+export const insertContractUploadSchema = createInsertSchema(contractUploads).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type ContractUpload = typeof contractUploads.$inferSelect;
+export type InsertContractUpload = z.infer<typeof insertContractUploadSchema>;

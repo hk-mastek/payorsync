@@ -9,6 +9,7 @@ import {
   variances,
   payors,
   aiSuggestionsLog,
+  contractUploads,
   type User,
   type InsertUser,
   type ClauseTemplate,
@@ -23,7 +24,11 @@ import {
   type InsertVariance,
   type Payor,
   type InsertPayor,
-  type InsertAiSuggestionLog
+  type InsertAiSuggestionLog,
+  type ContractUpload,
+  type InsertContractUpload,
+  type ExtractedClause,
+  type ClauseDecision
 } from "@shared/schema";
 import { eq, desc, and, gte, lte, ilike, or, sql, asc } from "drizzle-orm";
 
@@ -84,6 +89,13 @@ export interface IStorage {
   
   // AI Suggestions
   logAiSuggestion(data: InsertAiSuggestionLog): Promise<void>;
+  
+  // Contract Uploads
+  getContractUploads(): Promise<ContractUpload[]>;
+  getContractUpload(id: string): Promise<ContractUpload | undefined>;
+  createContractUpload(data: InsertContractUpload): Promise<ContractUpload>;
+  updateContractUpload(id: string, data: Partial<InsertContractUpload>): Promise<ContractUpload | undefined>;
+  deleteContractUpload(id: string): Promise<void>;
 }
 
 export const storage: IStorage = {
@@ -313,5 +325,32 @@ export const storage: IStorage = {
   // AI Suggestions
   async logAiSuggestion(data: InsertAiSuggestionLog) {
     await db.insert(aiSuggestionsLog).values(data);
+  },
+
+  // Contract Uploads
+  async getContractUploads() {
+    return db.select().from(contractUploads).orderBy(desc(contractUploads.createdAt));
+  },
+
+  async getContractUpload(id: string) {
+    const [upload] = await db.select().from(contractUploads).where(eq(contractUploads.id, id));
+    return upload;
+  },
+
+  async createContractUpload(data: InsertContractUpload) {
+    const [upload] = await db.insert(contractUploads).values(data).returning();
+    return upload;
+  },
+
+  async updateContractUpload(id: string, data: Partial<InsertContractUpload>) {
+    const [upload] = await db.update(contractUploads)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(contractUploads.id, id))
+      .returning();
+    return upload;
+  },
+
+  async deleteContractUpload(id: string) {
+    await db.delete(contractUploads).where(eq(contractUploads.id, id));
   },
 };
