@@ -338,6 +338,83 @@ Return JSON array with top 3 recommendations in this format:
     }
   });
 
+  // ===== GLOBAL SEARCH =====
+  app.get("/api/search", async (req: Request, res: Response) => {
+    try {
+      const { q } = req.query;
+      const query = (q as string || "").toLowerCase().trim();
+      
+      if (!query || query.length < 2) {
+        return res.json({ contracts: [], variances: [], clauses: [] });
+      }
+
+      // Fuzzy search helper - matches if query terms appear in target
+      const fuzzyMatch = (text: string, searchQuery: string): boolean => {
+        const normalizedText = text.toLowerCase();
+        const terms = searchQuery.split(/\s+/).filter(t => t.length > 0);
+        return terms.every(term => normalizedText.includes(term));
+      };
+
+      // Search contracts
+      const allContracts = await storage.getContracts({});
+      const matchedContracts = allContracts.filter(c => 
+        fuzzyMatch(c.contractName || "", query) ||
+        fuzzyMatch(c.contractNumber || "", query) ||
+        fuzzyMatch(c.payorName || "", query) ||
+        fuzzyMatch(c.jurisdiction || "", query)
+      ).slice(0, 5).map(c => ({
+        id: c.id,
+        type: "contract",
+        title: c.contractName,
+        subtitle: `${c.contractNumber} • ${c.payorName || ""} • ${c.jurisdiction || ""}`,
+        status: c.contractStatus,
+        url: `/drafter/${c.id}`
+      }));
+
+      // Search variances
+      const allVariances = await storage.getVariances({});
+      const matchedVariances = allVariances.filter(v => 
+        fuzzyMatch(v.varianceCode || "", query) ||
+        fuzzyMatch(v.patientId || "", query) ||
+        fuzzyMatch(v.patientName || "", query) ||
+        fuzzyMatch(v.payorName || "", query) ||
+        fuzzyMatch(v.claimNumber || "", query)
+      ).slice(0, 5).map(v => ({
+        id: v.id,
+        type: "variance",
+        title: v.varianceCode,
+        subtitle: `${v.patientName || v.patientId || ""} • ${v.payorName || ""} • $${v.varianceAmount?.toFixed(2) || "0.00"}`,
+        status: v.status,
+        url: `/variances`
+      }));
+
+      // Search clauses
+      const allClauses = await storage.getClauseTemplates({});
+      const matchedClauses = allClauses.filter(c => 
+        fuzzyMatch(c.clauseTitle || "", query) ||
+        fuzzyMatch(c.clauseCode || "", query) ||
+        fuzzyMatch(c.clauseText || "", query)
+      ).slice(0, 5).map(c => ({
+        id: c.id,
+        type: "clause",
+        title: c.clauseTitle,
+        subtitle: c.clauseCode,
+        status: c.status,
+        url: `/clause-library`
+      }));
+
+      res.json({
+        contracts: matchedContracts,
+        variances: matchedVariances,
+        clauses: matchedClauses,
+        total: matchedContracts.length + matchedVariances.length + matchedClauses.length
+      });
+    } catch (error) {
+      console.error("Search error:", error);
+      res.status(500).json({ error: "Search failed" });
+    }
+  });
+
   // ===== PAYORS =====
   app.get("/api/payors", async (req: Request, res: Response) => {
     try {
