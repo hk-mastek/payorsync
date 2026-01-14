@@ -17,13 +17,15 @@ import {
   type InsertClauseCategory,
   type Contract,
   type InsertContract,
+  type ContractClause,
+  type InsertContractClause,
   type Variance,
   type InsertVariance,
   type Payor,
   type InsertPayor,
   type InsertAiSuggestionLog
 } from "@shared/schema";
-import { eq, desc, and, gte, lte, ilike, or, sql } from "drizzle-orm";
+import { eq, desc, and, gte, lte, ilike, or, sql, asc } from "drizzle-orm";
 
 export interface IStorage {
   // Users
@@ -60,8 +62,9 @@ export interface IStorage {
   deleteContract(id: string): Promise<void>;
   
   // Contract Clauses
-  getContractClauses(contractId: string): Promise<any[]>;
-  addClauseToContract(data: any): Promise<any>;
+  getContractClauses(contractId: string): Promise<ContractClause[]>;
+  saveContractClauses(contractId: string, clauses: InsertContractClause[]): Promise<ContractClause[]>;
+  deleteContractClauses(contractId: string): Promise<void>;
   
   // Variances
   getVariances(filters?: {
@@ -222,12 +225,29 @@ export const storage: IStorage = {
 
   // Contract Clauses
   async getContractClauses(contractId: string) {
-    return db.select().from(contractClauses).where(eq(contractClauses.contractId, contractId));
+    return db.select()
+      .from(contractClauses)
+      .where(eq(contractClauses.contractId, contractId))
+      .orderBy(asc(contractClauses.displayOrder));
   },
 
-  async addClauseToContract(data: any) {
-    const [clause] = await db.insert(contractClauses).values(data).returning();
-    return clause;
+  async saveContractClauses(contractId: string, clauses: InsertContractClause[]) {
+    // Delete existing clauses and insert new ones
+    await db.delete(contractClauses).where(eq(contractClauses.contractId, contractId));
+    
+    if (clauses.length === 0) return [];
+    
+    const clausesWithOrder = clauses.map((clause, index) => ({
+      ...clause,
+      contractId,
+      displayOrder: index,
+    }));
+    
+    return db.insert(contractClauses).values(clausesWithOrder).returning();
+  },
+
+  async deleteContractClauses(contractId: string) {
+    await db.delete(contractClauses).where(eq(contractClauses.contractId, contractId));
   },
 
   // Variances

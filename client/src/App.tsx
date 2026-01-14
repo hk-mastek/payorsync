@@ -24,6 +24,7 @@ function Router() {
       <Route path="/settings" component={Settings} />
       <Route path="/clause-library" component={ClauseLibrary} />
       <Route path="/drafter" component={ContractDrafter} />
+      <Route path="/drafter/:contractId" component={ContractDrafter} />
       <Route component={NotFound} />
     </Switch>
   );

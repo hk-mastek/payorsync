@@ -234,6 +234,55 @@ Return JSON array with top 3 recommendations in this format:
     }
   });
 
+  // ===== CONTRACT CLAUSES =====
+  app.put("/api/contracts/:id/clauses", async (req: Request, res: Response) => {
+    try {
+      const { clauses } = req.body;
+      if (!Array.isArray(clauses)) {
+        return res.status(400).json({ error: "clauses must be an array" });
+      }
+      
+      const savedClauses = await storage.saveContractClauses(req.params.id, clauses);
+      res.json(savedClauses);
+    } catch (error) {
+      console.error("Error saving contract clauses:", error);
+      res.status(500).json({ error: "Failed to save contract clauses" });
+    }
+  });
+
+  // Save entire contract with clauses (transactional)
+  app.post("/api/contracts/draft", async (req: Request, res: Response) => {
+    try {
+      const { contract, clauses } = req.body;
+      
+      // Generate contract number if not provided
+      if (!contract.contractNumber) {
+        contract.contractNumber = `C-${Date.now()}`;
+      }
+      
+      // Create or update contract
+      let savedContract;
+      if (contract.id) {
+        savedContract = await storage.updateContract(contract.id, contract);
+      } else {
+        const validated = insertContractSchema.parse(contract);
+        savedContract = await storage.createContract(validated);
+      }
+      
+      if (!savedContract) {
+        return res.status(500).json({ error: "Failed to save contract" });
+      }
+      
+      // Save clauses
+      const savedClauses = await storage.saveContractClauses(savedContract.id, clauses || []);
+      
+      res.json({ contract: savedContract, clauses: savedClauses });
+    } catch (error) {
+      console.error("Error saving draft:", error);
+      res.status(400).json({ error: "Failed to save draft" });
+    }
+  });
+
   // ===== VARIANCES =====
   app.get("/api/variances", async (req: Request, res: Response) => {
     try {

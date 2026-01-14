@@ -11,22 +11,19 @@ import {
   Sparkles, 
   Search, 
   FileText, 
-  ChevronRight, 
   Plus, 
   Save, 
   RotateCcw, 
   AlertTriangle,
   CheckCircle2,
-  Paperclip,
   MessageSquare,
-  Wand2,
   X,
-  GripVertical,
   ChevronUp,
   ChevronDown,
   Edit3,
   Download,
-  Check
+  Check,
+  Loader2
 } from "lucide-react";
 import {
   ResizableHandle,
@@ -43,9 +40,11 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useEffect } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import { useLocation, useRoute } from "wouter";
+import { apiRequest } from "@/lib/queryClient";
 
 interface ClauseTemplate {
   id: string;
@@ -68,7 +67,7 @@ interface ClauseComment {
   id: string;
   text: string;
   author: string;
-  timestamp: Date;
+  timestamp: string;
 }
 
 interface DraftClause {
@@ -84,9 +83,22 @@ interface DraftClause {
   comments: ClauseComment[];
 }
 
+interface ContractData {
+  id?: string;
+  contractNumber?: string;
+  contractName: string;
+  payorName: string;
+  payorType: string;
+  jurisdiction: string;
+  contractStatus: string;
+}
+
 export default function ContractDrafter() {
+  const [, navigate] = useLocation();
+  const [match, params] = useRoute("/drafter/:contractId");
+  const contractId = match ? params?.contractId : null;
+  
   const [activeTab, setActiveTab] = useState("recommendations");
-  const [contractTitle, setContractTitle] = useState("BlueCross Shield Regional 2025 - Draft");
   const [searchQuery, setSearchQuery] = useState("");
   const [draftClauses, setDraftClauses] = useState<DraftClause[]>([]);
   const [editingClauseId, setEditingClauseId] = useState<string | null>(null);
@@ -94,12 +106,54 @@ export default function ContractDrafter() {
   const [commentText, setCommentText] = useState("");
   const [commentingClauseId, setCommentingClauseId] = useState<string | null>(null);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
-  const [contractContext] = useState({
+  const [contractData, setContractData] = useState<ContractData>({
+    contractName: "New Contract Draft",
     payorName: "BlueCross Shield",
     payorType: "commercial",
     jurisdiction: "California",
+    contractStatus: "draft"
   });
   const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  // Fetch existing contract if editing
+  const { data: existingContract, isLoading: loadingContract } = useQuery({
+    queryKey: ["/api/contracts", contractId],
+    queryFn: () => contractId ? fetch(`/api/contracts/${contractId}`).then(r => r.json()) : null,
+    enabled: !!contractId,
+  });
+
+  // Load existing contract data
+  useEffect(() => {
+    if (existingContract) {
+      setContractData({
+        id: existingContract.id,
+        contractNumber: existingContract.contractNumber,
+        contractName: existingContract.contractName,
+        payorName: existingContract.payorName || "",
+        payorType: existingContract.payorType || "commercial",
+        jurisdiction: existingContract.jurisdiction || "",
+        contractStatus: existingContract.contractStatus || "draft"
+      });
+      
+      // Load clauses
+      if (existingContract.clauses) {
+        const loadedClauses: DraftClause[] = existingContract.clauses.map((c: any) => ({
+          id: c.id,
+          clauseTemplateId: c.clauseTemplateId || "",
+          clauseCode: c.clauseCode || "",
+          clauseTitle: c.clauseTitle || "",
+          clauseText: c.clauseText,
+          customText: c.customizedText,
+          isEditing: false,
+          sectionName: c.sectionName || "General",
+          variableValues: c.variableValues || {},
+          comments: c.comments || []
+        }));
+        setDraftClauses(loadedClauses);
+      }
+    }
+  }, [existingContract]);
 
   // Fetch all clauses
   const { data: allClauses = [] } = useQuery<ClauseTemplate[]>({
@@ -109,6 +163,34 @@ export default function ContractDrafter() {
   // Fetch categories
   const { data: categories = [] } = useQuery<ClauseCategory[]>({
     queryKey: ["/api/clause-categories"],
+  });
+
+  // Save draft mutation
+  const saveDraftMutation = useMutation({
+    mutationFn: async (data: { contract: any; clauses: any[] }) => {
+      const response = await apiRequest("POST", "/api/contracts/draft", data);
+      return response.json();
+    },
+    onSuccess: (data) => {
+      setLastSaved(new Date());
+      setContractData(prev => ({ ...prev, id: data.contract.id, contractNumber: data.contract.contractNumber }));
+      queryClient.invalidateQueries({ queryKey: ["/api/contracts"] });
+      toast({
+        title: "Draft saved",
+        description: "Your contract has been saved to the database."
+      });
+      // Update URL if this is a new contract
+      if (!contractId && data.contract.id) {
+        navigate(`/drafter/${data.contract.id}`, { replace: true });
+      }
+    },
+    onError: (error) => {
+      toast({
+        title: "Save failed",
+        description: "Could not save your draft. Please try again.",
+        variant: "destructive"
+      });
+    }
   });
 
   // Filter clauses by search
@@ -155,7 +237,6 @@ export default function ContractDrafter() {
     const variableValues: Record<string, string> = {};
     variableMatches.forEach(match => {
       const varName = match.replace(/\{\{|\}\}/g, '');
-      // Set default currency values
       if (varName.includes('RATE') || varName.includes('FEE') || varName.includes('THRESHOLD')) {
         variableValues[varName] = '$';
       } else {
@@ -248,7 +329,7 @@ export default function ContractDrafter() {
             id: `comment-${Date.now()}`,
             text: commentText,
             author: "Sarah Holmes",
-            timestamp: new Date()
+            timestamp: new Date().toISOString()
           }]
         };
       }
@@ -278,29 +359,40 @@ export default function ContractDrafter() {
     }));
   };
 
-  // Save draft
+  // Save draft to database
   const saveDraft = () => {
-    const draftData = {
-      title: contractTitle,
-      context: contractContext,
-      clauses: draftClauses,
-      savedAt: new Date().toISOString()
-    };
-    
-    localStorage.setItem('contract-draft', JSON.stringify(draftData));
-    setLastSaved(new Date());
-    
-    toast({
-      title: "Draft saved",
-      description: "Your contract draft has been saved locally."
+    const clausesForSave = draftClauses.map(c => ({
+      clauseTemplateId: c.clauseTemplateId,
+      clauseCode: c.clauseCode,
+      clauseTitle: c.clauseTitle,
+      sectionName: c.sectionName,
+      clauseText: c.clauseText,
+      customizedText: c.customText,
+      isCustomized: !!c.customText,
+      variableValues: c.variableValues,
+      comments: c.comments,
+      status: "active"
+    }));
+
+    saveDraftMutation.mutate({
+      contract: {
+        id: contractData.id,
+        contractNumber: contractData.contractNumber,
+        contractName: contractData.contractName,
+        payorName: contractData.payorName,
+        payorType: contractData.payorType,
+        jurisdiction: contractData.jurisdiction,
+        contractStatus: contractData.contractStatus
+      },
+      clauses: clausesForSave
     });
   };
 
   // Export contract
   const exportContract = () => {
     let contractText = `DIALYSIS SERVICES AGREEMENT\n`;
-    contractText += `Contract ID: C-2025-DRAFT-01\n`;
-    contractText += `${contractContext.payorName} • ${contractContext.jurisdiction}\n`;
+    contractText += `Contract ID: ${contractData.contractNumber || 'DRAFT'}\n`;
+    contractText += `${contractData.payorName} • ${contractData.jurisdiction}\n`;
     contractText += `\n${'='.repeat(60)}\n\n`;
 
     draftClauses.forEach((clause, index) => {
@@ -308,7 +400,6 @@ export default function ContractDrafter() {
       contractText += `[${clause.clauseCode}]\n\n`;
       
       let text = clause.customText || clause.clauseText;
-      // Replace variables with values
       Object.entries(clause.variableValues).forEach(([varName, value]) => {
         text = text.replace(new RegExp(`\\{\\{${varName}\\}\\}`, 'g'), value || `[${varName}]`);
       });
@@ -326,12 +417,11 @@ export default function ContractDrafter() {
       contractText += `${'─'.repeat(60)}\n\n`;
     });
 
-    // Download as text file
     const blob = new Blob([contractText], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${contractTitle.replace(/\s+/g, '_')}.txt`;
+    a.download = `${contractData.contractName.replace(/\s+/g, '_')}.txt`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -387,6 +477,16 @@ export default function ContractDrafter() {
     { name: "All Variables Filled", completed: allVariables.every(v => v.value !== '' && v.value !== '$') },
   ];
 
+  if (loadingContract && contractId) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-[calc(100vh-8rem)]">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </DashboardLayout>
+    );
+  }
+
   return (
     <DashboardLayout>
       <div className="h-[calc(100vh-8rem)] flex flex-col -m-6">
@@ -396,29 +496,42 @@ export default function ContractDrafter() {
              <div className="flex flex-col">
                <input 
                  className="font-display font-bold text-sm bg-transparent border-none focus:outline-none focus:ring-0 p-0"
-                 value={contractTitle}
-                 onChange={(e) => setContractTitle(e.target.value)}
+                 value={contractData.contractName}
+                 onChange={(e) => setContractData(prev => ({ ...prev, contractName: e.target.value }))}
                  data-testid="input-contract-title"
                />
                <span className="text-xs text-muted-foreground flex items-center gap-1">
-                 <span className="w-2 h-2 rounded-full bg-amber-500"></span>
-                 Draft - {draftClauses.length} clauses
-                 {lastSaved && <span className="ml-2">• Saved {lastSaved.toLocaleTimeString()}</span>}
+                 <span className={cn(
+                   "w-2 h-2 rounded-full",
+                   contractData.id ? "bg-emerald-500" : "bg-amber-500"
+                 )}></span>
+                 {contractData.id ? `Saved • ${contractData.contractNumber}` : "Unsaved Draft"} - {draftClauses.length} clauses
+                 {lastSaved && <span className="ml-2">• Last saved {lastSaved.toLocaleTimeString()}</span>}
                </span>
              </div>
              <Badge variant="outline" className="text-xs font-mono">V.1.0</Badge>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" data-testid="button-history">
+            <Button variant="ghost" size="sm" onClick={() => navigate("/contracts")} data-testid="button-back">
               <RotateCcw className="h-4 w-4 mr-2" />
-              History
+              Back to Contracts
             </Button>
             <Button variant="outline" size="sm" onClick={exportContract} data-testid="button-export">
               <Download className="h-4 w-4 mr-2" />
               Export
             </Button>
-            <Button size="sm" className="gap-2" onClick={saveDraft} data-testid="button-save-draft">
-              <Save className="h-4 w-4" />
+            <Button 
+              size="sm" 
+              className="gap-2" 
+              onClick={saveDraft} 
+              disabled={saveDraftMutation.isPending}
+              data-testid="button-save-draft"
+            >
+              {saveDraftMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Save className="h-4 w-4" />
+              )}
               Save Draft
             </Button>
           </div>
@@ -458,11 +571,11 @@ export default function ContractDrafter() {
                         <h4 className="text-xs font-semibold text-primary uppercase tracking-wider mb-2">Drafting Context</h4>
                         <div className="grid grid-cols-2 gap-2 text-xs">
                           <span className="text-muted-foreground">Payor:</span>
-                          <span className="font-medium">{contractContext.payorName}</span>
+                          <span className="font-medium">{contractData.payorName}</span>
                           <span className="text-muted-foreground">Type:</span>
-                          <span className="font-medium">{contractContext.payorType}</span>
+                          <span className="font-medium">{contractData.payorType}</span>
                           <span className="text-muted-foreground">Jurisdiction:</span>
-                          <span className="font-medium">{contractContext.jurisdiction}</span>
+                          <span className="font-medium">{contractData.jurisdiction}</span>
                         </div>
                       </CardContent>
                     </Card>
@@ -579,8 +692,8 @@ export default function ContractDrafter() {
                 <div className="space-y-8 font-serif text-foreground/90 leading-relaxed">
                    <div className="text-center mb-12">
                      <h1 className="text-2xl font-bold uppercase tracking-widest mb-2">Dialysis Services Agreement</h1>
-                     <p className="text-sm text-muted-foreground">Contract ID: C-2025-DRAFT-01</p>
-                     <p className="text-xs text-muted-foreground mt-1">{contractContext.payorName} • {contractContext.jurisdiction}</p>
+                     <p className="text-sm text-muted-foreground">Contract ID: {contractData.contractNumber || 'DRAFT'}</p>
+                     <p className="text-xs text-muted-foreground mt-1">{contractData.payorName} • {contractData.jurisdiction}</p>
                    </div>
 
                    {draftClauses.length === 0 ? (
@@ -597,7 +710,6 @@ export default function ContractDrafter() {
                          data-testid={`draft-clause-${clause.id}`}
                        >
                          <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 flex gap-1">
-                            {/* Move up/down buttons */}
                             <Button 
                               size="icon" 
                               variant="ghost" 
@@ -619,7 +731,6 @@ export default function ContractDrafter() {
                               <ChevronDown className="h-3 w-3" />
                             </Button>
                             <Separator orientation="vertical" className="h-6" />
-                            {/* Edit button */}
                             <Button 
                               size="icon" 
                               variant="ghost" 
@@ -629,7 +740,6 @@ export default function ContractDrafter() {
                             >
                               <Edit3 className="h-3 w-3 text-blue-600" />
                             </Button>
-                            {/* Comment button */}
                             <Dialog>
                               <DialogTrigger asChild>
                                 <Button 

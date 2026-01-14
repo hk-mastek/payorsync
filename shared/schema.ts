@@ -213,6 +213,8 @@ export const contractClauses = pgTable("contract_clauses", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   contractId: varchar("contract_id").notNull().references(() => contracts.id, { onDelete: "cascade" }),
   clauseTemplateId: varchar("clause_template_id").references(() => clauseTemplates.id),
+  clauseCode: varchar("clause_code", { length: 50 }),
+  clauseTitle: varchar("clause_title", { length: 500 }),
   
   sectionName: varchar("section_name", { length: 200 }),
   subsectionName: varchar("subsection_name", { length: 200 }),
@@ -223,6 +225,7 @@ export const contractClauses = pgTable("contract_clauses", {
   isCustomized: boolean("is_customized").default(false),
   
   variableValues: jsonb("variable_values"),
+  comments: jsonb("comments"),
   
   status: varchar("status", { length: 50 }).default("active"),
   
