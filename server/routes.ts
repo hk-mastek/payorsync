@@ -348,21 +348,78 @@ Return JSON array with top 3 recommendations in this format:
         return res.json({ contracts: [], variances: [], clauses: [] });
       }
 
-      // Fuzzy search helper - matches if query terms appear in target
-      const fuzzyMatch = (text: string, searchQuery: string): boolean => {
-        const normalizedText = text.toLowerCase();
-        const terms = searchQuery.split(/\s+/).filter(t => t.length > 0);
-        return terms.every(term => normalizedText.includes(term));
+      // Levenshtein distance for fuzzy matching with typo tolerance
+      const levenshteinDistance = (a: string, b: string): number => {
+        if (a.length === 0) return b.length;
+        if (b.length === 0) return a.length;
+        const matrix: number[][] = [];
+        for (let i = 0; i <= b.length; i++) matrix[i] = [i];
+        for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
+        for (let i = 1; i <= b.length; i++) {
+          for (let j = 1; j <= a.length; j++) {
+            if (b.charAt(i - 1) === a.charAt(j - 1)) {
+              matrix[i][j] = matrix[i - 1][j - 1];
+            } else {
+              matrix[i][j] = Math.min(matrix[i - 1][j - 1] + 1, matrix[i][j - 1] + 1, matrix[i - 1][j] + 1);
+            }
+          }
+        }
+        return matrix[b.length][a.length];
       };
 
-      // Search contracts
+      // Fuzzy search helper - matches substrings, partial matches, and typos
+      const fuzzyMatch = (text: string, searchQuery: string): { match: boolean; score: number } => {
+        const normalizedText = text.toLowerCase();
+        const terms = searchQuery.split(/\s+/).filter(t => t.length > 0);
+        let totalScore = 0;
+        
+        for (const term of terms) {
+          // Exact substring match
+          if (normalizedText.includes(term)) {
+            totalScore += 100;
+            continue;
+          }
+          // Check each word in text for fuzzy match
+          const words = normalizedText.split(/\s+/);
+          let bestWordScore = 0;
+          for (const word of words) {
+            // Prefix match (typing "blu" matches "bluecross")
+            if (word.startsWith(term) || term.startsWith(word.substring(0, Math.min(word.length, term.length)))) {
+              bestWordScore = Math.max(bestWordScore, 80);
+              continue;
+            }
+            // Levenshtein distance for typo tolerance (allow 1-2 char errors for short terms)
+            const maxDistance = term.length <= 3 ? 1 : term.length <= 6 ? 2 : 3;
+            const distance = levenshteinDistance(term, word.substring(0, Math.min(word.length, term.length + maxDistance)));
+            if (distance <= maxDistance) {
+              bestWordScore = Math.max(bestWordScore, 60 - distance * 10);
+            }
+          }
+          if (bestWordScore === 0) return { match: false, score: 0 };
+          totalScore += bestWordScore;
+        }
+        return { match: true, score: totalScore / terms.length };
+      };
+
+      // Search contracts with scoring
       const allContracts = await storage.getContracts({});
-      const matchedContracts = allContracts.filter(c => 
-        fuzzyMatch(c.contractName || "", query) ||
-        fuzzyMatch(c.contractNumber || "", query) ||
-        fuzzyMatch(c.payorName || "", query) ||
-        fuzzyMatch(c.jurisdiction || "", query)
-      ).slice(0, 5).map(c => ({
+      const scoredContracts = allContracts.map(c => {
+        const nameMatch = fuzzyMatch(c.contractName || "", query);
+        const numberMatch = fuzzyMatch(c.contractNumber || "", query);
+        const payorMatch = fuzzyMatch(c.payorName || "", query);
+        const jurisdictionMatch = fuzzyMatch(c.jurisdiction || "", query);
+        const bestScore = Math.max(
+          nameMatch.match ? nameMatch.score : 0,
+          numberMatch.match ? numberMatch.score : 0,
+          payorMatch.match ? payorMatch.score : 0,
+          jurisdictionMatch.match ? jurisdictionMatch.score : 0
+        );
+        return { contract: c, score: bestScore };
+      }).filter(item => item.score > 0)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 5);
+
+      const matchedContracts = scoredContracts.map(({ contract: c }) => ({
         id: c.id,
         type: "contract",
         title: c.contractName,
@@ -371,15 +428,27 @@ Return JSON array with top 3 recommendations in this format:
         url: `/drafter/${c.id}`
       }));
 
-      // Search variances
+      // Search variances with scoring
       const allVariances = await storage.getVariances({});
-      const matchedVariances = allVariances.filter(v => 
-        fuzzyMatch(v.varianceCode || "", query) ||
-        fuzzyMatch(v.patientId || "", query) ||
-        fuzzyMatch(v.patientName || "", query) ||
-        fuzzyMatch(v.payorName || "", query) ||
-        fuzzyMatch(v.claimNumber || "", query)
-      ).slice(0, 5).map(v => ({
+      const scoredVariances = allVariances.map(v => {
+        const codeMatch = fuzzyMatch(v.varianceCode || "", query);
+        const patientIdMatch = fuzzyMatch(v.patientId || "", query);
+        const patientNameMatch = fuzzyMatch(v.patientName || "", query);
+        const payorMatch = fuzzyMatch(v.payorName || "", query);
+        const claimMatch = fuzzyMatch(v.claimNumber || "", query);
+        const bestScore = Math.max(
+          codeMatch.match ? codeMatch.score : 0,
+          patientIdMatch.match ? patientIdMatch.score : 0,
+          patientNameMatch.match ? patientNameMatch.score : 0,
+          payorMatch.match ? payorMatch.score : 0,
+          claimMatch.match ? claimMatch.score : 0
+        );
+        return { variance: v, score: bestScore };
+      }).filter(item => item.score > 0)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 5);
+
+      const matchedVariances = scoredVariances.map(({ variance: v }) => ({
         id: v.id,
         type: "variance",
         title: v.varianceCode,
@@ -388,13 +457,23 @@ Return JSON array with top 3 recommendations in this format:
         url: `/variances`
       }));
 
-      // Search clauses
+      // Search clauses with scoring
       const allClauses = await storage.getClauseTemplates({});
-      const matchedClauses = allClauses.filter(c => 
-        fuzzyMatch(c.clauseTitle || "", query) ||
-        fuzzyMatch(c.clauseCode || "", query) ||
-        fuzzyMatch(c.clauseText || "", query)
-      ).slice(0, 5).map(c => ({
+      const scoredClauses = allClauses.map(c => {
+        const titleMatch = fuzzyMatch(c.clauseTitle || "", query);
+        const codeMatch = fuzzyMatch(c.clauseCode || "", query);
+        const textMatch = fuzzyMatch((c.clauseText || "").substring(0, 200), query); // Limit text search
+        const bestScore = Math.max(
+          titleMatch.match ? titleMatch.score : 0,
+          codeMatch.match ? codeMatch.score : 0,
+          textMatch.match ? textMatch.score : 0
+        );
+        return { clause: c, score: bestScore };
+      }).filter(item => item.score > 0)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 5);
+
+      const matchedClauses = scoredClauses.map(({ clause: c }) => ({
         id: c.id,
         type: "clause",
         title: c.clauseTitle,
