@@ -1,14 +1,10 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
-import { createRequire } from "module";
 import { storage } from "./storage";
 import { registerChatRoutes } from "./replit_integrations/chat";
 import { registerImageRoutes } from "./replit_integrations/image";
 import OpenAI from "openai";
 import multer from "multer";
-const require = createRequire(import.meta.url);
-const pdfParseModule = require("pdf-parse");
-const pdfParse = pdfParseModule.default || pdfParseModule;
 import { 
   insertClauseTemplateSchema, 
   insertClauseCategorySchema,
@@ -317,9 +313,10 @@ Return JSON array with top 3 recommendations in this format:
         status: "processing",
       });
 
-      // Extract text from PDF
+      // Extract text from PDF using dynamic import
       let extractedText = "";
       try {
+        const pdfParse = (await import("pdf-parse")).default;
         const pdfData = await pdfParse(req.file.buffer);
         extractedText = pdfData.text;
       } catch (pdfError) {
