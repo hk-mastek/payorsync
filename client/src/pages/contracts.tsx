@@ -15,7 +15,15 @@ import {
   ChevronRight,
   Edit,
   Loader2,
-  Trash2
+  Trash2,
+  Upload,
+  ChevronDown,
+  FileUp,
+  Check,
+  X,
+  MessageSquare,
+  Library,
+  Send
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -26,11 +34,27 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useState, useRef } from "react";
 
 interface Contract {
   id: string;
@@ -46,6 +70,23 @@ interface Contract {
   renewalTerms: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+interface ExtractedClause {
+  id: string;
+  title: string;
+  text: string;
+  categoryGuess?: string;
+  rationale?: string;
+  variables?: string[];
+}
+
+interface ContractUpload {
+  id: string;
+  fileName: string;
+  extractedClauses: ExtractedClause[] | null;
+  status: string;
+  negotiationLetter?: string;
 }
 
 const lifecycleStages = [
@@ -81,6 +122,16 @@ export default function Contracts() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // PDF Upload state
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [currentUpload, setCurrentUpload] = useState<ContractUpload | null>(null);
+  const [clauseDecisions, setClauseDecisions] = useState<Record<string, "accept" | "negotiate">>({});
+  const [negotiationLetter, setNegotiationLetter] = useState<string>("");
+  const [isGeneratingLetter, setIsGeneratingLetter] = useState(false);
+  const [isAddingToLibrary, setIsAddingToLibrary] = useState(false);
 
   // Fetch contracts from API
   const { data: contracts = [], isLoading } = useQuery<Contract[]>({
@@ -109,6 +160,121 @@ export default function Contracts() {
     navigate(`/drafter/${contractId}`);
   };
 
+  const handleFileUpload = async (file: File) => {
+    if (!file || file.type !== "application/pdf") {
+      toast({ title: "Invalid file", description: "Please upload a PDF file.", variant: "destructive" });
+      return;
+    }
+
+    setIsUploading(true);
+    setClauseDecisions({});
+    setNegotiationLetter("");
+
+    try {
+      const formData = new FormData();
+      formData.append("pdf", file);
+
+      const response = await fetch("/api/contracts/upload-pdf", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error("Upload failed");
+      }
+
+      const upload = await response.json();
+      setCurrentUpload(upload);
+      
+      // Initialize all clauses as "accept" by default
+      const initialDecisions: Record<string, "accept" | "negotiate"> = {};
+      (upload.extractedClauses || []).forEach((clause: ExtractedClause) => {
+        initialDecisions[clause.id] = "accept";
+      });
+      setClauseDecisions(initialDecisions);
+
+      toast({ title: "PDF processed", description: `Extracted ${upload.extractedClauses?.length || 0} clauses.` });
+    } catch (error) {
+      toast({ title: "Upload failed", description: "Failed to process the PDF file.", variant: "destructive" });
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const toggleClauseDecision = (clauseId: string) => {
+    setClauseDecisions(prev => ({
+      ...prev,
+      [clauseId]: prev[clauseId] === "accept" ? "negotiate" : "accept"
+    }));
+  };
+
+  const handleAddToLibrary = async () => {
+    if (!currentUpload) return;
+
+    const acceptedClauseIds = Object.entries(clauseDecisions)
+      .filter(([, decision]) => decision === "accept")
+      .map(([id]) => id);
+
+    if (acceptedClauseIds.length === 0) {
+      toast({ title: "No clauses selected", description: "Mark at least one clause as 'Accept' to add to library.", variant: "destructive" });
+      return;
+    }
+
+    setIsAddingToLibrary(true);
+    try {
+      const response = await fetch(`/api/contract-uploads/${currentUpload.id}/add-to-library`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clauseIds: acceptedClauseIds }),
+      });
+
+      if (!response.ok) throw new Error("Failed to add to library");
+
+      const result = await response.json();
+      toast({ title: "Added to library", description: `${result.added} clause(s) added to your clause library.` });
+      queryClient.invalidateQueries({ queryKey: ["/api/clauses"] });
+    } catch (error) {
+      toast({ title: "Error", description: "Failed to add clauses to library.", variant: "destructive" });
+    } finally {
+      setIsAddingToLibrary(false);
+    }
+  };
+
+  const handleGenerateNegotiationLetter = async () => {
+    if (!currentUpload) return;
+
+    const negotiateClauseIds = Object.entries(clauseDecisions)
+      .filter(([, decision]) => decision === "negotiate")
+      .map(([id]) => id);
+
+    if (negotiateClauseIds.length === 0) {
+      toast({ title: "No clauses to negotiate", description: "Mark at least one clause as 'Negotiate' to generate a letter.", variant: "destructive" });
+      return;
+    }
+
+    setIsGeneratingLetter(true);
+    try {
+      const response = await fetch(`/api/contract-uploads/${currentUpload.id}/negotiation-letter`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clauseIds: negotiateClauseIds }),
+      });
+
+      if (!response.ok) throw new Error("Failed to generate letter");
+
+      const result = await response.json();
+      setNegotiationLetter(result.letter);
+      toast({ title: "Letter generated", description: "Negotiation letter has been drafted." });
+    } catch (error) {
+      toast({ title: "Error", description: "Failed to generate negotiation letter.", variant: "destructive" });
+    } finally {
+      setIsGeneratingLetter(false);
+    }
+  };
+
+  const acceptCount = Object.values(clauseDecisions).filter(d => d === "accept").length;
+  const negotiateCount = Object.values(clauseDecisions).filter(d => d === "negotiate").length;
+
   // Get most recently updated contract for workflow display
   const activeWorkflowContract = contracts.find(c => c.contractStatus === "negotiation") || contracts[0];
 
@@ -120,10 +286,214 @@ export default function Contracts() {
             <h1 className="text-3xl font-display font-bold text-foreground">Contract Management</h1>
             <p className="text-muted-foreground mt-1">Manage lifecycle, terms, and renewal strategies.</p>
           </div>
-          <Button className="gap-2" onClick={handleNewContract} data-testid="button-new-contract">
-            <Plus className="h-4 w-4" />
-            <span>New Contract</span>
-          </Button>
+          <div className="flex gap-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button className="gap-2" data-testid="button-new-contract">
+                  <Plus className="h-4 w-4" />
+                  <span>New Contract</span>
+                  <ChevronDown className="h-4 w-4 ml-1" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={handleNewContract} data-testid="menu-draft-contract">
+                  <Edit className="h-4 w-4 mr-2" />
+                  Draft New Contract
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setUploadDialogOpen(true)} data-testid="menu-upload-pdf">
+                  <Upload className="h-4 w-4 mr-2" />
+                  Upload PDF Contract
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+
+          {/* Hidden file input for PDF upload */}
+          <input
+            type="file"
+            ref={fileInputRef}
+            accept=".pdf"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleFileUpload(file);
+            }}
+          />
+
+          {/* PDF Upload Dialog */}
+          <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
+            <DialogContent className="max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
+              <DialogHeader>
+                <DialogTitle>Upload PDF Contract</DialogTitle>
+                <DialogDescription>
+                  Upload a contract PDF to extract and review clauses. You can then accept or negotiate each clause.
+                </DialogDescription>
+              </DialogHeader>
+
+              {!currentUpload && !isUploading ? (
+                <div 
+                  className="border-2 border-dashed rounded-lg p-12 text-center cursor-pointer hover:border-primary/50 transition-colors"
+                  onClick={() => fileInputRef.current?.click()}
+                  data-testid="pdf-dropzone"
+                >
+                  <FileUp className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
+                  <p className="text-lg font-medium">Drop your PDF here or click to upload</p>
+                  <p className="text-sm text-muted-foreground mt-2">Maximum file size: 10MB</p>
+                </div>
+              ) : isUploading ? (
+                <div className="py-12 text-center">
+                  <Loader2 className="h-12 w-12 mx-auto animate-spin text-primary mb-4" />
+                  <p className="text-lg font-medium">Processing PDF...</p>
+                  <p className="text-sm text-muted-foreground mt-2">Extracting clauses using AI. This may take a moment.</p>
+                </div>
+              ) : currentUpload && (
+                <div className="flex-1 overflow-hidden flex gap-4">
+                  {/* Left side: Extracted clauses */}
+                  <div className="flex-1 flex flex-col overflow-hidden">
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <h3 className="font-semibold">Extracted Clauses</h3>
+                        <p className="text-sm text-muted-foreground">
+                          {currentUpload.extractedClauses?.length || 0} clauses found • 
+                          <span className="text-green-600 ml-1">{acceptCount} Accept</span> • 
+                          <span className="text-amber-600 ml-1">{negotiateCount} Negotiate</span>
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={handleAddToLibrary}
+                          disabled={isAddingToLibrary || acceptCount === 0}
+                          data-testid="button-add-to-library"
+                        >
+                          {isAddingToLibrary ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Library className="h-4 w-4 mr-2" />}
+                          Add Accepted to Library
+                        </Button>
+                        <Button 
+                          size="sm"
+                          onClick={handleGenerateNegotiationLetter}
+                          disabled={isGeneratingLetter || negotiateCount === 0}
+                          data-testid="button-generate-letter"
+                        >
+                          {isGeneratingLetter ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <MessageSquare className="h-4 w-4 mr-2" />}
+                          Draft Negotiation Letter
+                        </Button>
+                      </div>
+                    </div>
+                    
+                    <ScrollArea className="flex-1 pr-4">
+                      <div className="space-y-3">
+                        {(currentUpload.extractedClauses || []).map((clause) => (
+                          <Card 
+                            key={clause.id} 
+                            className={cn(
+                              "transition-colors",
+                              clauseDecisions[clause.id] === "negotiate" && "border-amber-500/50 bg-amber-50/50 dark:bg-amber-900/10"
+                            )}
+                            data-testid={`clause-card-${clause.id}`}
+                          >
+                            <CardContent className="p-4">
+                              <div className="flex items-start justify-between gap-4">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <h4 className="font-medium">{clause.title}</h4>
+                                    {clause.categoryGuess && (
+                                      <Badge variant="outline" className="text-xs">{clause.categoryGuess}</Badge>
+                                    )}
+                                  </div>
+                                  <p className="text-sm text-muted-foreground line-clamp-3">{clause.text}</p>
+                                  {clause.rationale && (
+                                    <p className="text-xs text-muted-foreground mt-2 italic">
+                                      Importance: {clause.rationale}
+                                    </p>
+                                  )}
+                                  {clause.variables && clause.variables.length > 0 && (
+                                    <div className="flex gap-1 mt-2">
+                                      {clause.variables.map((v, i) => (
+                                        <Badge key={i} variant="secondary" className="text-xs">{v}</Badge>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="flex flex-col gap-1">
+                                  <Button
+                                    size="sm"
+                                    variant={clauseDecisions[clause.id] === "accept" ? "default" : "outline"}
+                                    className="w-24"
+                                    onClick={() => setClauseDecisions(prev => ({ ...prev, [clause.id]: "accept" }))}
+                                    data-testid={`button-accept-${clause.id}`}
+                                  >
+                                    <Check className="h-4 w-4 mr-1" />
+                                    Accept
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant={clauseDecisions[clause.id] === "negotiate" ? "default" : "outline"}
+                                    className={cn("w-24", clauseDecisions[clause.id] === "negotiate" && "bg-amber-500 hover:bg-amber-600")}
+                                    onClick={() => setClauseDecisions(prev => ({ ...prev, [clause.id]: "negotiate" }))}
+                                    data-testid={`button-negotiate-${clause.id}`}
+                                  >
+                                    <MessageSquare className="h-4 w-4 mr-1" />
+                                    Negotiate
+                                  </Button>
+                                </div>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                  </div>
+
+                  {/* Right side: Negotiation letter */}
+                  {negotiationLetter && (
+                    <div className="w-[400px] flex flex-col border-l pl-4">
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="font-semibold">Negotiation Letter</h3>
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={() => {
+                            navigator.clipboard.writeText(negotiationLetter);
+                            toast({ title: "Copied", description: "Letter copied to clipboard." });
+                          }}
+                          data-testid="button-copy-letter"
+                        >
+                          Copy
+                        </Button>
+                      </div>
+                      <Textarea 
+                        value={negotiationLetter}
+                        onChange={(e) => setNegotiationLetter(e.target.value)}
+                        className="flex-1 min-h-[400px] font-mono text-sm"
+                        data-testid="textarea-negotiation-letter"
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <DialogFooter className="mt-4">
+                {currentUpload && (
+                  <Button 
+                    variant="outline" 
+                    onClick={() => {
+                      setCurrentUpload(null);
+                      setClauseDecisions({});
+                      setNegotiationLetter("");
+                    }}
+                    data-testid="button-upload-another"
+                  >
+                    Upload Another PDF
+                  </Button>
+                )}
+                <Button variant="outline" onClick={() => setUploadDialogOpen(false)} data-testid="button-close-dialog">
+                  Close
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
 
         {/* Lifecycle Visualizer (for the active context) */}

@@ -1,11 +1,13 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
+import { createRequire } from "module";
 import { storage } from "./storage";
 import { registerChatRoutes } from "./replit_integrations/chat";
 import { registerImageRoutes } from "./replit_integrations/image";
 import OpenAI from "openai";
 import multer from "multer";
-import pdfParse from "pdf-parse";
+const require = createRequire(import.meta.url);
+const pdfParse = require("pdf-parse");
 import { 
   insertClauseTemplateSchema, 
   insertClauseCategorySchema,
