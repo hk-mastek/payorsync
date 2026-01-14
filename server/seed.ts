@@ -1,8 +1,17 @@
 import { db } from "./db";
-import { clauseCategories, clauseTemplates, payors } from "@shared/schema";
+import { clauseCategories, clauseTemplates, payors, contracts, contractClauses } from "@shared/schema";
+import { sql } from "drizzle-orm";
 
 async function seed() {
   console.log("🌱 Seeding database...");
+  
+  // Clear existing data (in reverse order of dependencies)
+  console.log("🧹 Clearing existing data...");
+  await db.delete(contractClauses);
+  await db.delete(contracts);
+  await db.delete(clauseTemplates);
+  await db.delete(clauseCategories);
+  await db.delete(payors);
 
   // Seed Clause Categories
   const categories = await db.insert(clauseCategories).values([
@@ -153,10 +162,262 @@ async function seed() {
       operatingStates: ["CA", "TX", "FL"],
       contactInfo: { phone: "1-800-555-0300", email: "provider@uhc.com" },
     },
+    {
+      payorName: "Aetna",
+      payorCode: "AETNA",
+      payorType: "commercial",
+      headquartersState: "CT",
+      operatingStates: ["CT", "NY", "NJ", "PA"],
+      contactInfo: { phone: "1-800-555-0400", email: "provider@aetna.com" },
+    },
+    {
+      payorName: "Cigna HealthCare",
+      payorCode: "CIGNA",
+      payorType: "commercial",
+      headquartersState: "CT",
+      operatingStates: ["CT", "TX", "FL", "GA"],
+      contactInfo: { phone: "1-800-555-0500", email: "provider@cigna.com" },
+    },
+    {
+      payorName: "Humana",
+      payorCode: "HUMANA",
+      payorType: "medicare_advantage",
+      headquartersState: "KY",
+      operatingStates: ["KY", "FL", "TX", "OH"],
+      contactInfo: { phone: "1-800-555-0600", email: "provider@humana.com" },
+    },
+    {
+      payorName: "Kaiser Permanente",
+      payorCode: "KAISER",
+      payorType: "commercial",
+      headquartersState: "CA",
+      operatingStates: ["CA", "OR", "WA", "CO"],
+      contactInfo: { phone: "1-800-555-0700", email: "provider@kaiserpermanente.org" },
+    },
+    {
+      payorName: "Molina Healthcare",
+      payorCode: "MOLINA",
+      payorType: "managed_medicaid",
+      headquartersState: "CA",
+      operatingStates: ["CA", "TX", "WA", "OH", "MI"],
+      contactInfo: { phone: "1-800-555-0800", email: "provider@molinahealthcare.com" },
+    },
+    {
+      payorName: "Florida Blue",
+      payorCode: "FL-BLUE",
+      payorType: "commercial",
+      headquartersState: "FL",
+      operatingStates: ["FL"],
+      contactInfo: { phone: "1-800-555-0900", email: "provider@floridablue.com" },
+    },
+    {
+      payorName: "BlueCross BlueShield of Texas",
+      payorCode: "BCBS-TX",
+      payorType: "commercial",
+      headquartersState: "TX",
+      operatingStates: ["TX"],
+      contactInfo: { phone: "1-800-555-1000", email: "provider@bcbstx.com" },
+    },
   ]).returning();
 
   console.log(`✅ Created ${payorData.length} payors`);
+
+  // Seed 13 Contracts across various states and payors
+  const contractsData = await db.insert(contracts).values([
+    {
+      contractNumber: "C-2024-BCBS-CA-001",
+      contractName: "BlueCross Shield California 2024",
+      payorId: payorData.find(p => p.payorCode === "BCBS-CA")?.id,
+      payorName: "BlueCross BlueShield of California",
+      payorType: "commercial",
+      jurisdiction: "California",
+      contractStatus: "active",
+      effectiveDate: "2024-01-01",
+      terminationDate: "2026-12-31",
+      renewalTerms: "Auto-renews annually unless terminated with 90-day notice",
+    },
+    {
+      contractNumber: "C-2024-ANTHEM-001",
+      contractName: "Anthem Blue Cross PPO Agreement",
+      payorId: payorData.find(p => p.payorCode === "ANTHEM-CA")?.id,
+      payorName: "Anthem Blue Cross",
+      payorType: "commercial",
+      jurisdiction: "California",
+      contractStatus: "negotiation",
+      effectiveDate: "2024-06-01",
+      terminationDate: "2027-05-31",
+    },
+    {
+      contractNumber: "C-2024-UHC-TX-001",
+      contractName: "UnitedHealthcare Texas Medicaid",
+      payorId: payorData.find(p => p.payorCode === "UHC-MED")?.id,
+      payorName: "UnitedHealthcare Community Plan",
+      payorType: "managed_medicaid",
+      jurisdiction: "Texas",
+      contractStatus: "active",
+      effectiveDate: "2024-01-01",
+      terminationDate: "2025-12-31",
+    },
+    {
+      contractNumber: "C-2024-AETNA-NY-001",
+      contractName: "Aetna New York Commercial",
+      payorId: payorData.find(p => p.payorCode === "AETNA")?.id,
+      payorName: "Aetna",
+      payorType: "commercial",
+      jurisdiction: "New York",
+      contractStatus: "draft",
+      effectiveDate: "2025-01-01",
+      terminationDate: "2027-12-31",
+    },
+    {
+      contractNumber: "C-2024-CIGNA-FL-001",
+      contractName: "Cigna Florida Dialysis Services",
+      payorId: payorData.find(p => p.payorCode === "CIGNA")?.id,
+      payorName: "Cigna HealthCare",
+      payorType: "commercial",
+      jurisdiction: "Florida",
+      contractStatus: "active",
+      effectiveDate: "2023-07-01",
+      terminationDate: "2025-06-30",
+      renewalTerms: "Requires 60-day renewal notice",
+    },
+    {
+      contractNumber: "C-2024-HUMANA-KY-001",
+      contractName: "Humana Kentucky Medicare Advantage",
+      payorId: payorData.find(p => p.payorCode === "HUMANA")?.id,
+      payorName: "Humana",
+      payorType: "medicare_advantage",
+      jurisdiction: "Kentucky",
+      contractStatus: "active",
+      effectiveDate: "2024-01-01",
+      terminationDate: "2026-12-31",
+    },
+    {
+      contractNumber: "C-2024-KAISER-OR-001",
+      contractName: "Kaiser Permanente Oregon",
+      payorId: payorData.find(p => p.payorCode === "KAISER")?.id,
+      payorName: "Kaiser Permanente",
+      payorType: "commercial",
+      jurisdiction: "Oregon",
+      contractStatus: "negotiation",
+      effectiveDate: "2025-01-01",
+      terminationDate: "2027-12-31",
+    },
+    {
+      contractNumber: "C-2024-MOLINA-OH-001",
+      contractName: "Molina Ohio Medicaid",
+      payorId: payorData.find(p => p.payorCode === "MOLINA")?.id,
+      payorName: "Molina Healthcare",
+      payorType: "managed_medicaid",
+      jurisdiction: "Ohio",
+      contractStatus: "active",
+      effectiveDate: "2024-03-01",
+      terminationDate: "2026-02-28",
+    },
+    {
+      contractNumber: "C-2024-FLBLUE-001",
+      contractName: "Florida Blue Statewide Agreement",
+      payorId: payorData.find(p => p.payorCode === "FL-BLUE")?.id,
+      payorName: "Florida Blue",
+      payorType: "commercial",
+      jurisdiction: "Florida",
+      contractStatus: "active",
+      effectiveDate: "2024-01-01",
+      terminationDate: "2026-12-31",
+      renewalTerms: "3-year term with annual rate adjustments",
+    },
+    {
+      contractNumber: "C-2024-BCBS-TX-001",
+      contractName: "BlueCross BlueShield Texas",
+      payorId: payorData.find(p => p.payorCode === "BCBS-TX")?.id,
+      payorName: "BlueCross BlueShield of Texas",
+      payorType: "commercial",
+      jurisdiction: "Texas",
+      contractStatus: "active",
+      effectiveDate: "2023-01-01",
+      terminationDate: "2025-12-31",
+    },
+    {
+      contractNumber: "C-2024-HUMANA-FL-001",
+      contractName: "Humana Florida Medicare Advantage",
+      payorId: payorData.find(p => p.payorCode === "HUMANA")?.id,
+      payorName: "Humana",
+      payorType: "medicare_advantage",
+      jurisdiction: "Florida",
+      contractStatus: "draft",
+      effectiveDate: "2025-01-01",
+      terminationDate: "2027-12-31",
+    },
+    {
+      contractNumber: "C-2024-CIGNA-GA-001",
+      contractName: "Cigna Georgia Regional",
+      payorId: payorData.find(p => p.payorCode === "CIGNA")?.id,
+      payorName: "Cigna HealthCare",
+      payorType: "commercial",
+      jurisdiction: "Georgia",
+      contractStatus: "negotiation",
+      effectiveDate: "2025-03-01",
+      terminationDate: "2028-02-28",
+    },
+    {
+      contractNumber: "C-2024-MOLINA-MI-001",
+      contractName: "Molina Michigan Medicaid",
+      payorId: payorData.find(p => p.payorCode === "MOLINA")?.id,
+      payorName: "Molina Healthcare",
+      payorType: "managed_medicaid",
+      jurisdiction: "Michigan",
+      contractStatus: "active",
+      effectiveDate: "2024-01-01",
+      terminationDate: "2025-12-31",
+      renewalTerms: "State contract renewable annually",
+    },
+  ]).returning();
+
+  console.log(`✅ Created ${contractsData.length} contracts`);
+
+  // Add clauses to each contract
+  const clauseAssignments = [];
+  
+  for (const contract of contractsData) {
+    // Assign 3-5 relevant clauses to each contract
+    const numClauses = 3 + Math.floor(Math.random() * 3);
+    const selectedClauses = clauses.slice(0, numClauses);
+    
+    for (let i = 0; i < selectedClauses.length; i++) {
+      const clause = selectedClauses[i];
+      clauseAssignments.push({
+        contractId: contract.id,
+        clauseTemplateId: clause.id,
+        clauseCode: clause.clauseCode,
+        clauseTitle: clause.clauseTitle,
+        sectionName: categories.find(c => c.id === clause.categoryId)?.categoryName || "General",
+        displayOrder: i,
+        clauseText: clause.clauseText,
+        variableValues: getDefaultVariables(clause.clauseCode),
+        status: "active",
+      });
+    }
+  }
+
+  const savedClauses = await db.insert(contractClauses).values(clauseAssignments).returning();
+  console.log(`✅ Added ${savedClauses.length} clauses to contracts`);
+
   console.log("✅ Database seeding complete!");
+}
+
+function getDefaultVariables(clauseCode: string): Record<string, string> {
+  switch (clauseCode) {
+    case "ESRD-BUNDLE-145":
+      return { REIMBURSEMENT_RATE: "$285.00" };
+    case "TRN-ADD-50":
+      return { TRAINING_FEE: "$45.00", MAX_TRAINING_SESSIONS: "25" };
+    case "SL-HIGH-10K":
+      return { STOP_LOSS_THRESHOLD: "$10,000", PERCENTAGE_OF_CHARGES: "80" };
+    case "APPEAL-2TIER":
+      return { APPEAL_DAYS: "60" };
+    default:
+      return {};
+  }
 }
 
 seed()
