@@ -47,14 +47,62 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 
 const varianceData = [
-  { id: "V-2023-001", patient: "John Smith", mrn: "882101", payor: "BlueCross Shield", serviceDate: "2024-05-12", billed: 4500.00, allowed: 2100.00, paid: 1850.00, variance: -250.00, status: "Open", type: "Underpayment" },
-  { id: "V-2023-002", patient: "Maria Garcia", mrn: "991022", payor: "Medicare A", serviceDate: "2024-05-14", billed: 3200.00, allowed: 850.00, paid: 0.00, variance: -850.00, status: "Investigating", type: "Denial" },
-  { id: "V-2023-003", patient: "Robert Chen", mrn: "112933", payor: "Aetna PPO", serviceDate: "2024-05-15", billed: 5100.00, allowed: 3400.00, paid: 3400.00, variance: 0.00, status: "Closed", type: "Match" },
-  { id: "V-2023-004", patient: "Sarah Johnson", mrn: "772199", payor: "United Health", serviceDate: "2024-05-18", billed: 4500.00, allowed: 2100.00, paid: 2050.00, variance: -50.00, status: "Open", type: "Underpayment" },
-  { id: "V-2023-005", patient: "David Wilson", mrn: "332101", payor: "Cigna", serviceDate: "2024-05-20", billed: 2800.00, allowed: 1200.00, paid: 1100.00, variance: -100.00, status: "Pending Appeal", type: "Underpayment" },
-  { id: "V-2023-006", patient: "Emily Davis", mrn: "442111", payor: "BlueCross Shield", serviceDate: "2024-05-21", billed: 4500.00, allowed: 2100.00, paid: 2100.00, variance: 0.00, status: "Closed", type: "Match" },
-  { id: "V-2023-007", patient: "Michael Brown", mrn: "551022", payor: "Medicare A", serviceDate: "2024-05-22", billed: 3200.00, allowed: 850.00, paid: 800.00, variance: -50.00, status: "Open", type: "Underpayment" },
-  { id: "V-2023-008", patient: "Lisa Taylor", mrn: "661033", payor: "Aetna PPO", serviceDate: "2024-05-24", billed: 5100.00, allowed: 3400.00, paid: 0.00, variance: -3400.00, status: "Investigating", type: "Denial" },
+  { 
+    id: "V-2023-001", patient: "John Smith", mrn: "882101", payor: "BlueCross Shield", serviceDate: "2024-05-12", 
+    billed: 4500.00, allowed: 2100.00, paid: 1850.00, variance: -250.00, status: "Open", type: "Underpayment",
+    rootCause: "Bundled Rate Mismatch",
+    rootCauseDetail: "Payor applied standard bundled rate but omitted the contracted training add-on of $250.00 as specified in Section 4.2.1.",
+    contractRef: "Section 4.2.1: Training Add-on Reimbursement - Provider shall be reimbursed an additional $250.00 per training session."
+  },
+  { 
+    id: "V-2023-002", patient: "Maria Garcia", mrn: "991022", payor: "Medicare A", serviceDate: "2024-05-14", 
+    billed: 3200.00, allowed: 850.00, paid: 0.00, variance: -850.00, status: "Investigating", type: "Denial",
+    rootCause: "Prior Authorization Missing",
+    rootCauseDetail: "Claim denied due to missing prior authorization. The $850.00 allowable was not paid because authorization was not on file at time of service.",
+    contractRef: "Section 3.1.2: Prior Authorization - All dialysis services require prior authorization within 72 hours of treatment."
+  },
+  { 
+    id: "V-2023-003", patient: "Robert Chen", mrn: "112933", payor: "Aetna PPO", serviceDate: "2024-05-15", 
+    billed: 5100.00, allowed: 3400.00, paid: 3400.00, variance: 0.00, status: "Closed", type: "Match",
+    rootCause: "No Variance",
+    rootCauseDetail: "Payment matches contracted rate. No discrepancy identified.",
+    contractRef: "N/A - Payment processed correctly per contract terms."
+  },
+  { 
+    id: "V-2023-004", patient: "Sarah Johnson", mrn: "772199", payor: "United Health", serviceDate: "2024-05-18", 
+    billed: 4500.00, allowed: 2100.00, paid: 2050.00, variance: -50.00, status: "Open", type: "Underpayment",
+    rootCause: "Co-insurance Calculation Error",
+    rootCauseDetail: "Payor incorrectly calculated member co-insurance, resulting in $50.00 underpayment. Member responsibility was overstated.",
+    contractRef: "Section 5.3: Member Cost Sharing - Provider shall receive full contracted rate less applicable member responsibility per benefit design."
+  },
+  { 
+    id: "V-2023-005", patient: "David Wilson", mrn: "332101", payor: "Cigna", serviceDate: "2024-05-20", 
+    billed: 2800.00, allowed: 1200.00, paid: 1100.00, variance: -100.00, status: "Pending Appeal", type: "Underpayment",
+    rootCause: "Lab Add-on Not Reimbursed",
+    rootCauseDetail: "Routine lab work add-on of $100.00 was bundled into base rate instead of being paid separately per contract.",
+    contractRef: "Section 4.3: Lab Services - Routine monthly labs shall be reimbursed at $100.00 in addition to dialysis bundle."
+  },
+  { 
+    id: "V-2023-006", patient: "Emily Davis", mrn: "442111", payor: "BlueCross Shield", serviceDate: "2024-05-21", 
+    billed: 4500.00, allowed: 2100.00, paid: 2100.00, variance: 0.00, status: "Closed", type: "Match",
+    rootCause: "No Variance",
+    rootCauseDetail: "Payment received in full per contracted allowable. Case closed with no action required.",
+    contractRef: "N/A - Payment processed correctly per contract terms."
+  },
+  { 
+    id: "V-2023-007", patient: "Michael Brown", mrn: "551022", payor: "Medicare A", serviceDate: "2024-05-22", 
+    billed: 3200.00, allowed: 850.00, paid: 800.00, variance: -50.00, status: "Open", type: "Underpayment",
+    rootCause: "Sequestration Over-Applied",
+    rootCauseDetail: "Medicare sequestration reduction of $50.00 was applied twice. Standard 2% reduction already reflected in allowed amount.",
+    contractRef: "Medicare Guidelines: Sequestration reduction of 2% applies once to allowable, not to base and adjusted amounts."
+  },
+  { 
+    id: "V-2023-008", patient: "Lisa Taylor", mrn: "661033", payor: "Aetna PPO", serviceDate: "2024-05-24", 
+    billed: 5100.00, allowed: 3400.00, paid: 0.00, variance: -3400.00, status: "Investigating", type: "Denial",
+    rootCause: "Timely Filing Denial",
+    rootCauseDetail: "Claim denied for exceeding 90-day timely filing limit. The full $3,400.00 allowable was denied. Proof of timely submission available for appeal.",
+    contractRef: "Section 2.1: Timely Filing - Claims must be submitted within 90 days of service date. Good cause exceptions apply per state regulations."
+  },
 ];
 
 export default function Variances() {
@@ -226,12 +274,12 @@ export default function Variances() {
                             <div className="space-y-4">
                               <div className="flex gap-3">
                                 <div className="mt-0.5">
-                                  <AlertCircle className="h-4 w-4 text-amber-500" />
+                                  <AlertCircle className={cn("h-4 w-4", row.status === "Closed" ? "text-green-500" : "text-amber-500")} />
                                 </div>
                                 <div>
-                                  <p className="text-sm font-medium">Bundled Rate Mismatch</p>
+                                  <p className="text-sm font-medium">{row.rootCause}</p>
                                   <p className="text-sm text-muted-foreground mt-1">
-                                    Payor applied a standard bundled rate of $200.00, but the contract specifies a carve-out for training add-on ($50.00) which was ignored.
+                                    {row.rootCauseDetail}
                                   </p>
                                 </div>
                               </div>
@@ -239,16 +287,15 @@ export default function Variances() {
                               <div className="space-y-2">
                                 <p className="text-sm font-medium">Contract Reference</p>
                                 <div className="p-2 bg-muted rounded text-xs font-mono">
-                                  Section 4.2.1: Training Add-on Reimbursement
-                                  <br/>
-                                  "Provider shall be reimbursed an additional $50.00 per session..."
+                                  {row.contractRef}
                                 </div>
                               </div>
                             </div>
                           </CardContent>
                         </Card>
 
-                        {/* Action Plan */}
+                        {/* Action Plan - Only show for non-closed variances */}
+                        {row.status !== "Closed" && (
                         <div className="space-y-3">
                           <h4 className="font-medium text-sm">Recommended Actions</h4>
                           
@@ -273,15 +320,18 @@ export default function Variances() {
                                             className="h-[300px] font-mono text-sm"
                                             defaultValue={`Date: ${new Date().toLocaleDateString()}
 
-RE: Appeal for Underpayment - Claim ID: ${row.id}
+RE: Appeal for ${row.type} - Claim ID: ${row.id}
 Patient: ${row.patient} (MRN: ${row.mrn})
 Service Date: ${row.serviceDate}
 
 To Claims Department,
 
-This letter serves as a formal appeal regarding the underpayment of the above-referenced claim. Our records indicate that the claim was paid at $${row.paid.toFixed(2)}, while the contracted allowable amount is $${row.allowed.toFixed(2)}, resulting in a variance of $${Math.abs(row.variance).toFixed(2)}.
+This letter serves as a formal appeal regarding the ${row.type.toLowerCase()} of the above-referenced claim. Our records indicate that the claim was paid at $${row.paid.toFixed(2)}, while the contracted allowable amount is $${row.allowed.toFixed(2)}, resulting in a variance of $${Math.abs(row.variance).toFixed(2)}.
 
-The discrepancy appears to stem from the omission of the contracted add-on rate for training, as specified in Section 4.2.1 of our Agreement ("Training Add-on Reimbursement"). The contract clearly states: "Provider shall be reimbursed an additional $50.00 per session."
+Root Cause: ${row.rootCause}
+${row.rootCauseDetail}
+
+Contract Reference: ${row.contractRef}
 
 Please review this claim and issue the additional payment of $${Math.abs(row.variance).toFixed(2)} to resolve this variance.
 
@@ -305,6 +355,7 @@ PAYORSYNC`}
                             Update Fee Schedule Config
                           </Button>
                         </div>
+                        )}
                       </div>
                     </SheetContent>
                   </Sheet>
