@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -106,6 +107,41 @@ const varianceData = [
 ];
 
 export default function Variances() {
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [payorFilter, setPayorFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Get unique payors for the filter dropdown
+  const uniquePayors = Array.from(new Set(varianceData.map(v => v.payor)));
+
+  // Filter variances based on selected criteria
+  const filteredVariances = varianceData.filter(row => {
+    // Status filter
+    if (statusFilter !== "all" && row.status.toLowerCase() !== statusFilter.toLowerCase()) {
+      return false;
+    }
+    // Payor filter
+    if (payorFilter !== "all" && row.payor !== payorFilter) {
+      return false;
+    }
+    // Type filter
+    if (typeFilter !== "all" && row.type.toLowerCase() !== typeFilter.toLowerCase()) {
+      return false;
+    }
+    // Search filter (patient name or MRN)
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      const matchesPatient = row.patient.toLowerCase().includes(query);
+      const matchesMrn = row.mrn.toLowerCase().includes(query);
+      const matchesId = row.id.toLowerCase().includes(query);
+      if (!matchesPatient && !matchesMrn && !matchesId) {
+        return false;
+      }
+    }
+    return true;
+  });
+
   return (
     <DashboardLayout>
       <div className="flex flex-col gap-6">
@@ -131,49 +167,56 @@ export default function Variances() {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="space-y-2">
               <label className="text-sm font-medium">Status</label>
-              <Select defaultValue="all">
-                <SelectTrigger>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger data-testid="filter-status">
                   <SelectValue placeholder="Select Status" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Statuses</SelectItem>
                   <SelectItem value="open">Open</SelectItem>
                   <SelectItem value="investigating">Investigating</SelectItem>
+                  <SelectItem value="pending appeal">Pending Appeal</SelectItem>
                   <SelectItem value="closed">Closed</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Payor</label>
-              <Select defaultValue="all">
-                <SelectTrigger>
+              <Select value={payorFilter} onValueChange={setPayorFilter}>
+                <SelectTrigger data-testid="filter-payor">
                   <SelectValue placeholder="Select Payor" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Payors</SelectItem>
-                  <SelectItem value="bcbs">BlueCross Shield</SelectItem>
-                  <SelectItem value="medicare">Medicare</SelectItem>
-                  <SelectItem value="aetna">Aetna</SelectItem>
+                  {uniquePayors.map(payor => (
+                    <SelectItem key={payor} value={payor}>{payor}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Variance Type</label>
-              <Select defaultValue="all">
-                <SelectTrigger>
+              <Select value={typeFilter} onValueChange={setTypeFilter}>
+                <SelectTrigger data-testid="filter-type">
                   <SelectValue placeholder="Select Type" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Types</SelectItem>
                   <SelectItem value="underpayment">Underpayment</SelectItem>
                   <SelectItem value="denial">Denial</SelectItem>
+                  <SelectItem value="match">Match</SelectItem>
                   <SelectItem value="overpayment">Overpayment</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Search</label>
-              <Input placeholder="Search by Patient or MRN..." />
+              <Input 
+                placeholder="Search by Patient, MRN, or ID..." 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                data-testid="filter-search"
+              />
             </div>
           </div>
         </Card>
@@ -199,7 +242,7 @@ export default function Variances() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {varianceData.map((row) => (
+                {filteredVariances.map((row) => (
                   <Sheet key={row.id}>
                     <SheetTrigger asChild>
                       <TableRow className="cursor-pointer hover:bg-muted/50">
