@@ -7,6 +7,14 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { 
   Sparkles, 
   Search, 
@@ -23,7 +31,8 @@ import {
   Edit3,
   Download,
   Check,
-  Loader2
+  Loader2,
+  Wand2
 } from "lucide-react";
 import {
   ResizableHandle,
@@ -106,11 +115,14 @@ export default function ContractDrafter() {
   const [commentText, setCommentText] = useState("");
   const [commentingClauseId, setCommentingClauseId] = useState<string | null>(null);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [showSetupDialog, setShowSetupDialog] = useState(!contractId);
+  const [setupPrompt, setSetupPrompt] = useState("");
+  const [isGenerating, setIsGenerating] = useState(false);
   const [contractData, setContractData] = useState<ContractData>({
-    contractName: "New Contract Draft",
-    payorName: "BlueCross Shield",
+    contractName: "",
+    payorName: "",
     payorType: "commercial",
-    jurisdiction: "California",
+    jurisdiction: "",
     contractStatus: "draft"
   });
   const { toast } = useToast();
@@ -126,6 +138,7 @@ export default function ContractDrafter() {
   // Load existing contract data
   useEffect(() => {
     if (existingContract) {
+      setShowSetupDialog(false);
       setContractData({
         id: existingContract.id,
         contractNumber: existingContract.contractNumber,
@@ -154,6 +167,84 @@ export default function ContractDrafter() {
       }
     }
   }, [existingContract]);
+
+  // Generate clauses from prompt using AI
+  const generateFromPrompt = async () => {
+    if (!setupPrompt.trim()) {
+      setShowSetupDialog(false);
+      return;
+    }
+    
+    setIsGenerating(true);
+    try {
+      // Find relevant clauses based on prompt keywords
+      const promptLower = setupPrompt.toLowerCase();
+      const relevantClauses = allClauses.filter(clause => {
+        const text = `${clause.clauseTitle} ${clause.clauseText} ${clause.clauseCode}`.toLowerCase();
+        const promptWords = promptLower.split(/\s+/).filter(w => w.length > 3);
+        return promptWords.some(word => text.includes(word));
+      }).slice(0, 5);
+      
+      // Add relevant clauses to draft
+      relevantClauses.forEach(clause => {
+        const variableMatches = clause.clauseText.match(/\{\{([^}]+)\}\}/g) || [];
+        const variableValues: Record<string, string> = {};
+        variableMatches.forEach(match => {
+          const varName = match.replace(/\{\{|\}\}/g, '');
+          if (varName.includes('RATE') || varName.includes('FEE') || varName.includes('THRESHOLD')) {
+            variableValues[varName] = '$';
+          } else {
+            variableValues[varName] = '';
+          }
+        });
+
+        const newDraftClause: DraftClause = {
+          id: `draft-${Date.now()}-${clause.id}`,
+          clauseTemplateId: clause.id,
+          clauseCode: clause.clauseCode,
+          clauseTitle: clause.clauseTitle,
+          clauseText: clause.clauseText,
+          customText: null,
+          isEditing: false,
+          sectionName: categories.find(c => c.id === clause.categoryId)?.categoryName || "General",
+          variableValues,
+          comments: []
+        };
+        setDraftClauses(prev => [...prev, newDraftClause]);
+      });
+      
+      toast({
+        title: "Clauses suggested",
+        description: `Added ${relevantClauses.length} relevant clauses based on your prompt.`
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Could not generate clauses. Please add them manually.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsGenerating(false);
+      setShowSetupDialog(false);
+    }
+  };
+
+  const handleStartDraft = () => {
+    if (!contractData.contractName.trim()) {
+      toast({
+        title: "Name required",
+        description: "Please enter a name for your contract.",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    if (setupPrompt.trim()) {
+      generateFromPrompt();
+    } else {
+      setShowSetupDialog(false);
+    }
+  };
 
   // Fetch all clauses
   const { data: allClauses = [] } = useQuery<ClauseTemplate[]>({
@@ -489,6 +580,123 @@ export default function ContractDrafter() {
 
   return (
     <DashboardLayout>
+      {/* New Contract Setup Dialog */}
+      <Dialog open={showSetupDialog && !contractId} onOpenChange={setShowSetupDialog}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5 text-primary" />
+              New Contract
+            </DialogTitle>
+            <DialogDescription>
+              Set up your new contract. Optionally describe what you need and AI will suggest relevant clauses.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="contract-name">Contract Name *</Label>
+              <Input 
+                id="contract-name"
+                placeholder="e.g., BlueCross Shield California 2025"
+                value={contractData.contractName}
+                onChange={(e) => setContractData(prev => ({ ...prev, contractName: e.target.value }))}
+                data-testid="input-new-contract-name"
+              />
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="payor-name">Payor Name</Label>
+                <Input 
+                  id="payor-name"
+                  placeholder="e.g., BlueCross Shield"
+                  value={contractData.payorName}
+                  onChange={(e) => setContractData(prev => ({ ...prev, payorName: e.target.value }))}
+                  data-testid="input-payor-name"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="jurisdiction">Jurisdiction</Label>
+                <Input 
+                  id="jurisdiction"
+                  placeholder="e.g., California"
+                  value={contractData.jurisdiction}
+                  onChange={(e) => setContractData(prev => ({ ...prev, jurisdiction: e.target.value }))}
+                  data-testid="input-jurisdiction"
+                />
+              </div>
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="payor-type">Payor Type</Label>
+              <Select 
+                value={contractData.payorType} 
+                onValueChange={(value) => setContractData(prev => ({ ...prev, payorType: value }))}
+              >
+                <SelectTrigger data-testid="select-payor-type">
+                  <SelectValue placeholder="Select payor type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="commercial">Commercial</SelectItem>
+                  <SelectItem value="medicare">Medicare</SelectItem>
+                  <SelectItem value="medicaid">Medicaid</SelectItem>
+                  <SelectItem value="medicare_advantage">Medicare Advantage</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <Separator />
+            
+            <div className="space-y-2">
+              <Label htmlFor="ai-prompt" className="flex items-center gap-2">
+                <Wand2 className="h-4 w-4 text-purple-500" />
+                AI Prompt (Optional)
+              </Label>
+              <Textarea 
+                id="ai-prompt"
+                placeholder="Describe what you need in your contract and AI will suggest relevant clauses. E.g., 'I need a dialysis services agreement with reimbursement terms, timely filing requirements, and medical necessity definitions'"
+                className="min-h-[100px]"
+                value={setupPrompt}
+                onChange={(e) => setSetupPrompt(e.target.value)}
+                data-testid="textarea-ai-prompt"
+              />
+              <p className="text-xs text-muted-foreground">
+                Leave blank to start with an empty draft and add clauses manually.
+              </p>
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => navigate("/contracts")}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleStartDraft} 
+              disabled={isGenerating}
+              data-testid="button-start-draft"
+            >
+              {isGenerating ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Generating...
+                </>
+              ) : setupPrompt.trim() ? (
+                <>
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  Start with AI
+                </>
+              ) : (
+                <>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Start Draft
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <div className="h-[calc(100vh-8rem)] flex flex-col -m-6">
         {/* Top Toolbar */}
         <div className="h-14 border-b bg-card flex items-center justify-between px-4 shrink-0">
