@@ -1,9 +1,10 @@
-import { Switch, Route, Redirect } from "wouter";
+import { Switch, Route } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
+import Dashboard from "@/pages/dashboard";
 import Variances from "@/pages/variances";
 import Contracts from "@/pages/contracts";
 import Analytics from "@/pages/analytics";
@@ -15,7 +16,7 @@ import ContractDrafter from "@/pages/contract-drafter";
 function Router() {
   return (
     <Switch>
-      <Route path="/">{() => <Redirect to="/contracts" />}</Route>
+      <Route path="/" component={Dashboard} />
       <Route path="/variances" component={Variances} />
       <Route path="/contracts" component={Contracts} />
       <Route path="/analytics" component={Analytics} />
