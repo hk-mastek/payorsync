@@ -316,9 +316,21 @@ Return JSON array with top 3 recommendations in this format:
       // Extract text from PDF using dynamic import
       let extractedText = "";
       try {
-        const pdfParse = (await import("pdf-parse")).default;
-        const pdfData = await pdfParse(req.file.buffer);
-        extractedText = pdfData.text;
+        const pdfModule = await import("pdf-parse");
+        const PDFParse = pdfModule.PDFParse;
+        // Convert Buffer to Uint8Array as required by pdf-parse
+        const uint8Array = new Uint8Array(req.file.buffer);
+        const parser = new PDFParse(uint8Array);
+        await parser.load();
+        const info = await parser.getInfo();
+        const pageCount = info.pages || 0;
+        // Extract text from all pages
+        const textPromises = [];
+        for (let i = 0; i < pageCount; i++) {
+          textPromises.push(parser.getPageText(i));
+        }
+        const pageTexts = await Promise.all(textPromises);
+        extractedText = pageTexts.join("\n\n");
       } catch (pdfError) {
         console.error("PDF parsing error:", pdfError);
         await storage.updateContractUpload(uploadRecord.id, {
