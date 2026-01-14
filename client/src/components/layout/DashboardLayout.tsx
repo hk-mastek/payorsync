@@ -120,7 +120,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   };
 
   const navigation = [
-    { name: 'Dashboard', href: '/', icon: LayoutDashboard },
+    // { name: 'Dashboard', href: '/', icon: LayoutDashboard }, // Hidden - reactivate later
     { name: 'Contracts', href: '/contracts', icon: FileText },
     { name: 'Drafting', href: '/drafter', icon: PenTool },
     { name: 'Library', href: '/clause-library', icon: BookOpen },
