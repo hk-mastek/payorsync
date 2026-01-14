@@ -14,6 +14,7 @@ import {
   PenTool,
   BookOpen
 } from "lucide-react";
+import avatarImage from "@assets/stock_images/professional_headsho_e15b535e.jpg";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { 
@@ -82,11 +83,11 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       <div className="border-t border-sidebar-border p-4">
         <div className="flex items-center gap-3 px-2">
           <Avatar className="h-9 w-9 border border-sidebar-border">
-            <AvatarImage src="https://github.com/shadcn.png" />
-            <AvatarFallback>SH</AvatarFallback>
+            <AvatarImage src={avatarImage} />
+            <AvatarFallback>AH</AvatarFallback>
           </Avatar>
           <div className="flex flex-col">
-            <span className="text-sm font-medium text-white">Sarah Holmes</span>
+            <span className="text-sm font-medium text-white">Arbor Holmes</span>
             <span className="text-xs text-sidebar-foreground/60">Revenue Manager</span>
           </div>
         </div>
@@ -135,7 +136,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon" className="rounded-full">
                   <Avatar className="h-8 w-8">
-                    <AvatarFallback>SH</AvatarFallback>
+                    <AvatarImage src={avatarImage} />
+                    <AvatarFallback>AH</AvatarFallback>
                   </Avatar>
                 </Button>
               </DropdownMenuTrigger>

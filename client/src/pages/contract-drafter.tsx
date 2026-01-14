@@ -419,7 +419,7 @@ export default function ContractDrafter() {
           comments: [...c.comments, {
             id: `comment-${Date.now()}`,
             text: commentText,
-            author: "Sarah Holmes",
+            author: "Arbor Holmes",
             timestamp: new Date().toISOString()
           }]
         };
