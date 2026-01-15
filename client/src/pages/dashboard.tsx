@@ -1,198 +1,487 @@
+import { useState, useMemo } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { 
   ArrowUpRight, 
   ArrowDownRight, 
   DollarSign, 
   FileText, 
   AlertTriangle,
-  Activity,
-  Calendar
+  Clock,
+  CheckCircle,
+  TrendingUp,
+  Filter,
+  ChevronDown,
+  ChevronRight,
+  RefreshCw,
+  Download,
+  Lightbulb,
+  AlertCircle,
+  Users,
+  MapPin,
+  BarChart3,
+  X
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { 
-  AreaChart, 
-  Area, 
+  BarChart,
+  Bar,
   XAxis, 
   YAxis, 
   CartesianGrid, 
   Tooltip, 
   ResponsiveContainer,
-  BarChart,
-  Bar,
-  Legend
+  LineChart,
+  Line,
+  Area,
+  AreaChart,
+  Cell,
+  Legend,
+  Treemap,
+  PieChart,
+  Pie
 } from "recharts";
+import {
+  generateVarianceData,
+  calculateKPIs,
+  groupByPayorType,
+  groupByState,
+  groupByRootCause,
+  groupByAgingBucket,
+  getTrendData,
+  PAYORS,
+  STATES,
+  ROOT_CAUSES,
+  ANALYSTS,
+  STATUSES,
+  type VarianceRecord
+} from "@shared/dashboardData";
 
-const reimbursementData = [
-  { month: "Jan", expected: 4200, actual: 4100 },
-  { month: "Feb", expected: 4500, actual: 4300 },
-  { month: "Mar", expected: 4800, actual: 4600 },
-  { month: "Apr", expected: 4600, actual: 4200 },
-  { month: "May", expected: 5100, actual: 4900 },
-  { month: "Jun", expected: 5400, actual: 5100 },
+const COLORS = [
+  'hsl(196, 100%, 37%)',
+  'hsl(173, 58%, 39%)',
+  'hsl(12, 76%, 61%)',
+  'hsl(43, 74%, 66%)',
+  'hsl(27, 87%, 67%)',
+  'hsl(280, 65%, 60%)',
+  'hsl(220, 70%, 50%)',
+  'hsl(160, 60%, 45%)',
 ];
 
-const varianceByPayor = [
-  { name: "BlueCross", value: 12500 },
-  { name: "Aetna", value: 8400 },
-  { name: "Medicare", value: 15600 },
-  { name: "United", value: 6200 },
-];
+function formatCurrency(amount: number): string {
+  if (amount >= 1000000) return `$${(amount / 1000000).toFixed(1)}M`;
+  if (amount >= 1000) return `$${(amount / 1000).toFixed(1)}K`;
+  return `$${amount.toFixed(2)}`;
+}
+
+function formatNumber(num: number): string {
+  return num.toLocaleString();
+}
+
+interface KPICardProps {
+  title: string;
+  value: string;
+  trend: number;
+  trendLabel: string;
+  icon: React.ReactNode;
+  iconColor: string;
+  onClick?: () => void;
+  positive?: boolean;
+}
+
+function KPICard({ title, value, trend, trendLabel, icon, iconColor, onClick, positive }: KPICardProps) {
+  const isPositiveTrend = positive !== undefined ? (positive ? trend > 0 : trend < 0) : trend > 0;
+  
+  return (
+    <Card 
+      className={cn("hover:shadow-md transition-all cursor-pointer", onClick && "hover:ring-2 hover:ring-primary/20")}
+      onClick={onClick}
+      data-testid={`kpi-card-${title.toLowerCase().replace(/\s+/g, '-')}`}
+    >
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
+        <div className={cn("p-2 rounded-lg", iconColor)}>
+          {icon}
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="text-2xl font-bold">{value}</div>
+        <p className="text-xs text-muted-foreground flex items-center mt-1">
+          <span className={cn("flex items-center mr-1", isPositiveTrend ? "text-emerald-600" : "text-rose-600")}>
+            {trend > 0 ? <ArrowUpRight className="h-3 w-3 mr-0.5" /> : <ArrowDownRight className="h-3 w-3 mr-0.5" />}
+            {Math.abs(trend)}%
+          </span>
+          {trendLabel}
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function Dashboard() {
+  const [lastUpdated] = useState(new Date());
+  const [isInsightsOpen, setIsInsightsOpen] = useState(true);
+  const [selectedPayorType, setSelectedPayorType] = useState<string>("all");
+  const [selectedState, setSelectedState] = useState<string>("all");
+  const [selectedStatus, setSelectedStatus] = useState<string>("all");
+  const [selectedRootCause, setSelectedRootCause] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [detailView, setDetailView] = useState<'payor' | 'state' | 'rootCause' | null>(null);
+  const [detailItem, setDetailItem] = useState<string | null>(null);
+  
+  const allData = useMemo(() => generateVarianceData(2250), []);
+  
+  const filteredData = useMemo(() => {
+    return allData.filter(v => {
+      if (selectedPayorType !== "all" && v.payorType !== selectedPayorType) return false;
+      if (selectedState !== "all" && v.state !== selectedState) return false;
+      if (selectedStatus !== "all" && v.status !== selectedStatus) return false;
+      if (selectedRootCause !== "all" && v.rootCauseCategory !== selectedRootCause) return false;
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase();
+        return v.id.toLowerCase().includes(query) ||
+               v.payorName.toLowerCase().includes(query) ||
+               v.assignedAnalyst.toLowerCase().includes(query);
+      }
+      return true;
+    });
+  }, [allData, selectedPayorType, selectedState, selectedStatus, selectedRootCause, searchQuery]);
+  
+  const kpis = useMemo(() => calculateKPIs(filteredData), [filteredData]);
+  const payorTypeData = useMemo(() => groupByPayorType(filteredData), [filteredData]);
+  const stateData = useMemo(() => groupByState(filteredData), [filteredData]);
+  const rootCauseData = useMemo(() => groupByRootCause(filteredData), [filteredData]);
+  const agingData = useMemo(() => groupByAgingBucket(filteredData), [filteredData]);
+  const trendData = useMemo(() => getTrendData(allData), [allData]);
+  
+  const paginatedData = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredData.slice(start, start + pageSize);
+  }, [filteredData, currentPage, pageSize]);
+  
+  const totalPages = Math.ceil(filteredData.length / pageSize);
+  
+  const clearFilters = () => {
+    setSelectedPayorType("all");
+    setSelectedState("all");
+    setSelectedStatus("all");
+    setSelectedRootCause("all");
+    setSearchQuery("");
+  };
+  
+  const hasActiveFilters = selectedPayorType !== "all" || selectedState !== "all" || 
+    selectedStatus !== "all" || selectedRootCause !== "all" || searchQuery !== "";
+
+  const treemapData = rootCauseData.map(rc => ({
+    name: rc.category,
+    size: rc.amount,
+    count: rc.count,
+    children: rc.subcategories.map(sub => ({
+      name: sub.name,
+      size: sub.amount,
+      count: sub.count,
+    })),
+  }));
+
   return (
     <DashboardLayout>
-      <div className="flex flex-col gap-8">
-        {/* Header Section */}
+      <div className="flex flex-col gap-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-display font-bold text-foreground">Financial Overview</h1>
-            <p className="text-muted-foreground mt-1">Monitor contract performance and payment variances across all payors.</p>
+            <h1 className="text-3xl font-display font-bold text-foreground">Executive Payment Variance Dashboard</h1>
+            <p className="text-muted-foreground mt-1">ESRD Revenue Cycle Performance Overview</p>
           </div>
           <div className="flex items-center gap-3">
-            <Button variant="outline" className="gap-2">
-              <Calendar className="h-4 w-4" />
-              <span>Last 30 Days</span>
+            <span className="text-xs text-muted-foreground">
+              Last updated: {lastUpdated.toLocaleTimeString()}
+            </span>
+            <Button variant="outline" size="sm" className="gap-2" data-testid="button-refresh">
+              <RefreshCw className="h-4 w-4" />
+              Refresh
             </Button>
-            <Button className="gap-2">
-              <FileText className="h-4 w-4" />
-              <span>Export Report</span>
+            <Button variant="outline" size="sm" className="gap-2" data-testid="button-export">
+              <Download className="h-4 w-4" />
+              Export
             </Button>
           </div>
         </div>
 
-        {/* KPI Grid */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <Card className="hover:shadow-md transition-shadow">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Total Expected</CardTitle>
-              <DollarSign className="h-4 w-4 text-primary" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">$2.4M</div>
-              <p className="text-xs text-muted-foreground flex items-center mt-1">
-                <span className="text-emerald-600 flex items-center mr-1">
-                  <ArrowUpRight className="h-3 w-3 mr-0.5" /> +12%
-                </span>
-                from last month
-              </p>
-            </CardContent>
+        <Collapsible open={isInsightsOpen} onOpenChange={setIsInsightsOpen}>
+          <Card className="border-l-4 border-l-primary">
+            <CollapsibleTrigger asChild>
+              <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Lightbulb className="h-5 w-5 text-primary" />
+                    <CardTitle>AI-Generated Executive Insights</CardTitle>
+                  </div>
+                  {isInsightsOpen ? <ChevronDown className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />}
+                </div>
+              </CardHeader>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <CardContent>
+                <div className="grid md:grid-cols-3 gap-6">
+                  <div>
+                    <h4 className="font-semibold flex items-center gap-2 mb-3">
+                      <BarChart3 className="h-4 w-4 text-blue-500" />
+                      Key Insights This Week
+                    </h4>
+                    <ul className="space-y-2 text-sm text-muted-foreground">
+                      <li>• Medicare Advantage variances increased 23% driven by Humana authorization denials</li>
+                      <li>• Texas region showing 45% higher variance rate than national average</li>
+                      <li>• Coding errors resolution time improved by 5 days after new training program</li>
+                      <li>• Top 10 payors account for 68% of total variance dollars</li>
+                    </ul>
+                  </div>
+                  <div>
+                    <h4 className="font-semibold flex items-center gap-2 mb-3">
+                      <AlertCircle className="h-4 w-4 text-amber-500" />
+                      Action Required
+                    </h4>
+                    <ul className="space-y-2 text-sm text-muted-foreground">
+                      <li className="text-amber-600">• 351 variances approaching timely filing deadline (next 14 days)</li>
+                      <li className="text-amber-600">• 134 high-priority variances unassigned</li>
+                      <li className="text-rose-600">• Cigna contract rate discrepancy affecting 68 claims - escalation recommended</li>
+                    </ul>
+                  </div>
+                  <div>
+                    <h4 className="font-semibold flex items-center gap-2 mb-3">
+                      <TrendingUp className="h-4 w-4 text-emerald-500" />
+                      Positive Trends
+                    </h4>
+                    <ul className="space-y-2 text-sm text-muted-foreground">
+                      <li className="text-emerald-600">• Overall resolution rate improved 3.2% month-over-month</li>
+                      <li className="text-emerald-600">• Average days to resolution decreased from 38 to 34 days</li>
+                      <li className="text-emerald-600">• Recovery rate at highest level in 6 months</li>
+                    </ul>
+                  </div>
+                </div>
+              </CardContent>
+            </CollapsibleContent>
           </Card>
+        </Collapsible>
 
-          <Card className="hover:shadow-md transition-shadow">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Active Variances</CardTitle>
-              <AlertTriangle className="h-4 w-4 text-amber-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-amber-600">142</div>
-              <p className="text-xs text-muted-foreground flex items-center mt-1">
-                <span className="text-rose-600 flex items-center mr-1">
-                  <ArrowUpRight className="h-3 w-3 mr-0.5" /> +4%
-                </span>
-                new this week
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card className="hover:shadow-md transition-shadow">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Recovery Yield</CardTitle>
-              <Activity className="h-4 w-4 text-emerald-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">88.4%</div>
-              <p className="text-xs text-muted-foreground flex items-center mt-1">
-                <span className="text-emerald-600 flex items-center mr-1">
-                  <ArrowUpRight className="h-3 w-3 mr-0.5" /> +2.1%
-                </span>
-                compliance rate
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card className="hover:shadow-md transition-shadow">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Active Contracts</CardTitle>
-              <FileText className="h-4 w-4 text-blue-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">24</div>
-              <p className="text-xs text-muted-foreground flex items-center mt-1">
-                <span className="text-muted-foreground flex items-center mr-1">
-                  2 expiring soon
-                </span>
-              </p>
-            </CardContent>
-          </Card>
+        <div className="grid gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
+          <KPICard
+            title="Total Open Variances"
+            value={formatNumber(kpis.totalOpenVariances)}
+            trend={4.2}
+            trendLabel="vs prior week"
+            icon={<AlertTriangle className="h-4 w-4 text-amber-600" />}
+            iconColor="bg-amber-100"
+            positive={false}
+          />
+          <KPICard
+            title="Total Variance Amount"
+            value={formatCurrency(kpis.totalVarianceAmount)}
+            trend={-2.1}
+            trendLabel="vs prior week"
+            icon={<DollarSign className="h-4 w-4 text-rose-600" />}
+            iconColor="bg-rose-100"
+            positive={false}
+          />
+          <KPICard
+            title="New This Week"
+            value={formatNumber(kpis.newThisWeek)}
+            trend={12.5}
+            trendLabel="vs prior week"
+            icon={<FileText className="h-4 w-4 text-blue-600" />}
+            iconColor="bg-blue-100"
+            positive={false}
+          />
+          <KPICard
+            title="Resolved This Week"
+            value={formatNumber(kpis.resolvedThisWeek)}
+            trend={8.3}
+            trendLabel="vs prior week"
+            icon={<CheckCircle className="h-4 w-4 text-emerald-600" />}
+            iconColor="bg-emerald-100"
+            positive={true}
+          />
+          <KPICard
+            title="Avg Days to Resolution"
+            value={`${kpis.avgDaysToResolution} days`}
+            trend={-5.2}
+            trendLabel="vs prior month"
+            icon={<Clock className="h-4 w-4 text-purple-600" />}
+            iconColor="bg-purple-100"
+            positive={false}
+          />
+          <KPICard
+            title="Recovery Rate"
+            value={`${kpis.recoveryRate}%`}
+            trend={3.2}
+            trendLabel="vs prior month"
+            icon={<TrendingUp className="h-4 w-4 text-emerald-600" />}
+            iconColor="bg-emerald-100"
+            positive={true}
+          />
         </div>
 
-        {/* Charts Section */}
-        <div className="grid gap-4 md:grid-cols-7">
-          <Card className="col-span-4">
+        <Card className="p-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2">
+              <Filter className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-medium">Filters:</span>
+            </div>
+            
+            <Select value={selectedPayorType} onValueChange={setSelectedPayorType}>
+              <SelectTrigger className="w-[180px]" data-testid="filter-payor-type">
+                <SelectValue placeholder="Payor Type" />
+              </SelectTrigger>
+              <SelectContent className="bg-white">
+                <SelectItem value="all">All Payor Types</SelectItem>
+                <SelectItem value="Medicare Traditional">Medicare Traditional</SelectItem>
+                <SelectItem value="Medicare Advantage">Medicare Advantage</SelectItem>
+                <SelectItem value="Medicaid">Medicaid</SelectItem>
+                <SelectItem value="Medicaid Managed Care">Medicaid Managed Care</SelectItem>
+                <SelectItem value="Commercial PPO">Commercial PPO</SelectItem>
+                <SelectItem value="Commercial HMO">Commercial HMO</SelectItem>
+                <SelectItem value="Commercial EPO">Commercial EPO</SelectItem>
+                <SelectItem value="VA">VA</SelectItem>
+                <SelectItem value="TRICARE">TRICARE</SelectItem>
+              </SelectContent>
+            </Select>
+            
+            <Select value={selectedState} onValueChange={setSelectedState}>
+              <SelectTrigger className="w-[150px]" data-testid="filter-state">
+                <SelectValue placeholder="State" />
+              </SelectTrigger>
+              <SelectContent className="bg-white">
+                <SelectItem value="all">All States</SelectItem>
+                {STATES.map(s => (
+                  <SelectItem key={s.code} value={s.code}>{s.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            
+            <Select value={selectedStatus} onValueChange={setSelectedStatus}>
+              <SelectTrigger className="w-[140px]" data-testid="filter-status">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent className="bg-white">
+                <SelectItem value="all">All Statuses</SelectItem>
+                {STATUSES.map(s => (
+                  <SelectItem key={s.value} value={s.value}>{s.value}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            
+            <Select value={selectedRootCause} onValueChange={setSelectedRootCause}>
+              <SelectTrigger className="w-[180px]" data-testid="filter-root-cause">
+                <SelectValue placeholder="Root Cause" />
+              </SelectTrigger>
+              <SelectContent className="bg-white">
+                <SelectItem value="all">All Root Causes</SelectItem>
+                {ROOT_CAUSES.map(rc => (
+                  <SelectItem key={rc.category} value={rc.category}>{rc.category}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            
+            <Input
+              placeholder="Search ID, Payor, Analyst..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-[200px]"
+              data-testid="input-search"
+            />
+            
+            {hasActiveFilters && (
+              <Button variant="ghost" size="sm" onClick={clearFilters} className="gap-1" data-testid="button-clear-filters">
+                <X className="h-4 w-4" />
+                Clear Filters
+              </Button>
+            )}
+            
+            <div className="ml-auto text-sm text-muted-foreground">
+              Showing {formatNumber(filteredData.length)} of {formatNumber(allData.length)} variances
+            </div>
+          </div>
+        </Card>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <Card>
             <CardHeader>
-              <CardTitle>Reimbursement Trends</CardTitle>
-              <CardDescription>
-                Comparison of expected vs. actual reimbursement over the last 6 months.
-              </CardDescription>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="h-5 w-5" />
+                Variance by Payor Type
+              </CardTitle>
+              <CardDescription>Total variance amount by insurance category</CardDescription>
             </CardHeader>
-            <CardContent className="pl-2">
+            <CardContent>
               <div className="h-[300px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={reimbursementData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="colorExpected" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.1}/>
-                        <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}/>
-                      </linearGradient>
-                      <linearGradient id="colorActual" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="hsl(var(--chart-2))" stopOpacity={0.1}/>
-                        <stop offset="95%" stopColor="hsl(var(--chart-2))" stopOpacity={0}/>
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-                    <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
-                    <YAxis 
-                      stroke="hsl(var(--muted-foreground))" 
-                      fontSize={12} 
-                      tickLine={false} 
-                      axisLine={false}
-                      tickFormatter={(value) => `$${value}`} 
-                    />
+                  <BarChart data={payorTypeData} layout="vertical" margin={{ top: 0, right: 30, left: 120, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="hsl(var(--border))" />
+                    <XAxis type="number" tickFormatter={(v) => formatCurrency(v)} stroke="hsl(var(--muted-foreground))" fontSize={11} />
+                    <YAxis type="category" dataKey="type" stroke="hsl(var(--muted-foreground))" fontSize={11} width={110} />
                     <Tooltip 
+                      cursor={{ fill: 'hsl(var(--muted)/0.3)' }}
                       contentStyle={{ backgroundColor: 'hsl(var(--card))', borderRadius: '8px', border: '1px solid hsl(var(--border))' }}
-                      itemStyle={{ color: 'hsl(var(--foreground))' }}
+                      formatter={(value: number) => [formatCurrency(value), 'Variance']}
                     />
-                    <Area type="monotone" dataKey="expected" stroke="hsl(var(--primary))" strokeWidth={2} fillOpacity={1} fill="url(#colorExpected)" name="Expected" />
-                    <Area type="monotone" dataKey="actual" stroke="hsl(var(--chart-2))" strokeWidth={2} fillOpacity={1} fill="url(#colorActual)" name="Actual" />
-                  </AreaChart>
+                    <Bar 
+                      dataKey="amount" 
+                      radius={[0, 4, 4, 0]} 
+                      barSize={20}
+                      onClick={(data) => {
+                        setSelectedPayorType(data.type);
+                      }}
+                      cursor="pointer"
+                    >
+                      {payorTypeData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Bar>
+                  </BarChart>
                 </ResponsiveContainer>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="col-span-3">
+          <Card>
             <CardHeader>
-              <CardTitle>Underpayments by Payor</CardTitle>
-              <CardDescription>
-                Top payors contributing to variance.
-              </CardDescription>
+              <CardTitle className="flex items-center gap-2">
+                <MapPin className="h-5 w-5" />
+                Top States by Variance
+              </CardTitle>
+              <CardDescription>Geographic distribution of payment variances</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="h-[300px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={varianceByPayor} layout="vertical" margin={{ top: 0, right: 0, left: 40, bottom: 0 }}>
+                  <BarChart data={stateData.slice(0, 10)} layout="vertical" margin={{ top: 0, right: 30, left: 50, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="hsl(var(--border))" />
-                    <XAxis type="number" hide />
-                    <YAxis type="category" dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} width={80} />
+                    <XAxis type="number" tickFormatter={(v) => formatCurrency(v)} stroke="hsl(var(--muted-foreground))" fontSize={11} />
+                    <YAxis type="category" dataKey="state" stroke="hsl(var(--muted-foreground))" fontSize={11} width={40} />
                     <Tooltip 
-                      cursor={{fill: 'transparent'}}
+                      cursor={{ fill: 'hsl(var(--muted)/0.3)' }}
                       contentStyle={{ backgroundColor: 'hsl(var(--card))', borderRadius: '8px', border: '1px solid hsl(var(--border))' }}
+                      formatter={(value: number, name: string, props: any) => [formatCurrency(value), props.payload.stateName]}
                     />
-                    <Bar dataKey="value" fill="hsl(var(--chart-3))" radius={[0, 4, 4, 0]} barSize={32} name="Variance Amount" />
+                    <Bar 
+                      dataKey="amount" 
+                      fill="hsl(var(--primary))" 
+                      radius={[0, 4, 4, 0]} 
+                      barSize={20}
+                      onClick={(data) => {
+                        setSelectedState(data.state);
+                      }}
+                      cursor="pointer"
+                    />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -200,84 +489,301 @@ export default function Dashboard() {
           </Card>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-6">
-          {/* Recent Variances List */}
-          <Card className="md:col-span-2">
+        <div className="grid gap-4 md:grid-cols-2">
+          <Card>
             <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>Recent Variance Alerts</CardTitle>
-                  <CardDescription>High priority payment discrepancies requiring attention.</CardDescription>
-                </div>
-                <Button variant="outline" size="sm" asChild>
-                  <a href="/variances">View All</a>
-                </Button>
-              </div>
+              <CardTitle>Root Cause Analysis</CardTitle>
+              <CardDescription>Variance distribution by denial reason</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {[
-                  { id: "V-1023", patient: "JD-9921", payor: "BlueCross", desc: "Dialysis bundled rate mismatch", amount: "-$240.00", status: "Open" },
-                  { id: "V-1024", patient: "AS-1102", payor: "Medicare", desc: "Denied claim: Authorization missing", amount: "-$1,200.00", status: "Investigating" },
-                  { id: "V-1025", patient: "RK-5501", payor: "Aetna", desc: "Incorrect fee schedule applied", amount: "-$85.50", status: "Open" },
-                  { id: "V-1026", patient: "TM-2291", payor: "United", desc: "Partial payment received", amount: "-$125.00", status: "Resolved" },
-                ].map((item) => (
-                  <div key={item.id} className="flex items-center justify-between border-b last:border-0 pb-4 last:pb-0">
-                    <div className="flex items-start gap-4">
-                      <div className="mt-1 bg-red-100 dark:bg-red-900/30 p-2 rounded-full">
-                        <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400" />
-                      </div>
-                      <div>
-                        <div className="font-medium">{item.desc}</div>
-                        <div className="text-sm text-muted-foreground flex gap-2 mt-0.5">
-                          <span className="font-mono">{item.id}</span>
-                          <span>•</span>
-                          <span>{item.payor}</span>
-                          <span>•</span>
-                          <span>{item.patient}</span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="font-bold text-red-600">{item.amount}</div>
-                      <Badge variant={item.status === "Resolved" ? "secondary" : "outline"} className="mt-1 text-xs">
-                        {item.status}
-                      </Badge>
-                    </div>
-                  </div>
-                ))}
+              <div className="h-[300px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={rootCauseData}
+                      dataKey="amount"
+                      nameKey="category"
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={100}
+                      innerRadius={40}
+                      paddingAngle={2}
+                      onClick={(data) => {
+                        setSelectedRootCause(data.category);
+                      }}
+                      cursor="pointer"
+                    >
+                      {rootCauseData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip 
+                      contentStyle={{ backgroundColor: 'hsl(var(--card))', borderRadius: '8px', border: '1px solid hsl(var(--border))' }}
+                      formatter={(value: number) => [formatCurrency(value), 'Variance']}
+                    />
+                    <Legend 
+                      layout="vertical" 
+                      align="right" 
+                      verticalAlign="middle"
+                      formatter={(value) => <span className="text-xs">{value}</span>}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
               </div>
             </CardContent>
           </Card>
 
-          {/* Activity Feed */}
           <Card>
             <CardHeader>
-              <CardTitle>Live Activity</CardTitle>
+              <CardTitle>Aging Analysis</CardTitle>
+              <CardDescription>Variance amount by age bucket</CardDescription>
             </CardHeader>
-            <CardContent className="px-4">
-               <div className="space-y-6 border-l ml-3 pl-6">
-                 {[
-                   { text: "System detected 3 new variances", time: "10 mins ago", type: "alert" },
-                   { text: "Arbor Holmes resolved V-1026", time: "45 mins ago", type: "success" },
-                   { text: "Medicare 2025 Fee Schedule updated", time: "2 hours ago", type: "info" },
-                   { text: "Exported Q2 Financial Report", time: "4 hours ago", type: "info" },
-                 ].map((item, i) => (
-                   <div key={i} className="relative">
-                     <div className={cn(
-                       "absolute -left-[30px] top-1 h-2 w-2 rounded-full ring-4 ring-background",
-                       item.type === "alert" ? "bg-red-500" :
-                       item.type === "success" ? "bg-emerald-500" :
-                       "bg-blue-500"
-                     )} />
-                     <p className="text-sm font-medium leading-none">{item.text}</p>
-                     <p className="text-xs text-muted-foreground mt-1">{item.time}</p>
-                   </div>
-                 ))}
-               </div>
+            <CardContent>
+              <div className="h-[300px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={agingData} margin={{ top: 10, right: 30, left: 0, bottom: 20 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
+                    <XAxis 
+                      dataKey="bucket" 
+                      stroke="hsl(var(--muted-foreground))" 
+                      fontSize={10} 
+                      tickLine={false}
+                      angle={-45}
+                      textAnchor="end"
+                      height={60}
+                    />
+                    <YAxis 
+                      stroke="hsl(var(--muted-foreground))" 
+                      fontSize={11} 
+                      tickFormatter={(v) => formatCurrency(v)}
+                      width={60}
+                    />
+                    <Tooltip 
+                      contentStyle={{ backgroundColor: 'hsl(var(--card))', borderRadius: '8px', border: '1px solid hsl(var(--border))' }}
+                      formatter={(value: number) => [formatCurrency(value), 'Amount']}
+                    />
+                    <Bar dataKey="amount" radius={[4, 4, 0, 0]}>
+                      {agingData.map((entry, index) => (
+                        <Cell 
+                          key={`cell-${index}`} 
+                          fill={index < 2 ? 'hsl(173, 58%, 39%)' : index < 4 ? 'hsl(43, 74%, 66%)' : 'hsl(12, 76%, 61%)'} 
+                        />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             </CardContent>
           </Card>
         </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>12-Month Trend Analysis</CardTitle>
+            <CardDescription>New vs resolved variances and cumulative open amount over time</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[300px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={trendData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="colorNew" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="hsl(12, 76%, 61%)" stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor="hsl(12, 76%, 61%)" stopOpacity={0}/>
+                    </linearGradient>
+                    <linearGradient id="colorResolved" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="hsl(173, 58%, 39%)" stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor="hsl(173, 58%, 39%)" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
+                  <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={11} />
+                  <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} />
+                  <Tooltip 
+                    contentStyle={{ backgroundColor: 'hsl(var(--card))', borderRadius: '8px', border: '1px solid hsl(var(--border))' }}
+                  />
+                  <Legend />
+                  <Area 
+                    type="monotone" 
+                    dataKey="new" 
+                    stroke="hsl(12, 76%, 61%)" 
+                    strokeWidth={2}
+                    fillOpacity={1} 
+                    fill="url(#colorNew)" 
+                    name="New Variances" 
+                  />
+                  <Area 
+                    type="monotone" 
+                    dataKey="resolved" 
+                    stroke="hsl(173, 58%, 39%)" 
+                    strokeWidth={2}
+                    fillOpacity={1} 
+                    fill="url(#colorResolved)" 
+                    name="Resolved" 
+                  />
+                  <Line 
+                    type="monotone" 
+                    dataKey="net" 
+                    stroke="hsl(var(--primary))" 
+                    strokeWidth={2}
+                    strokeDasharray="5 5"
+                    name="Net Change"
+                    dot={false}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Variance Details</CardTitle>
+                <CardDescription>
+                  {formatNumber(filteredData.length)} variances • Page {currentPage} of {totalPages}
+                </CardDescription>
+              </div>
+              <div className="flex items-center gap-2">
+                <Select value={String(pageSize)} onValueChange={(v) => { setPageSize(Number(v)); setCurrentPage(1); }}>
+                  <SelectTrigger className="w-[100px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white">
+                    <SelectItem value="25">25 rows</SelectItem>
+                    <SelectItem value="50">50 rows</SelectItem>
+                    <SelectItem value="100">100 rows</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <ScrollArea className="h-[400px]">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[100px]">ID</TableHead>
+                    <TableHead>Payor</TableHead>
+                    <TableHead className="w-[60px]">State</TableHead>
+                    <TableHead>Root Cause</TableHead>
+                    <TableHead className="text-right">Billed</TableHead>
+                    <TableHead className="text-right">Variance</TableHead>
+                    <TableHead className="w-[80px]">Age</TableHead>
+                    <TableHead className="w-[100px]">Status</TableHead>
+                    <TableHead className="w-[70px]">Priority</TableHead>
+                    <TableHead>Analyst</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {paginatedData.map((row) => (
+                    <TableRow key={row.id} className="cursor-pointer hover:bg-muted/50">
+                      <TableCell className="font-mono text-xs">{row.id}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-col">
+                          <span className="text-sm font-medium truncate max-w-[200px]">{row.payorName}</span>
+                          <span className="text-xs text-muted-foreground">{row.payorType}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>{row.state}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-col">
+                          <span className="text-sm">{row.rootCauseCategory}</span>
+                          <span className="text-xs text-muted-foreground">{row.rootCauseSubcategory}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right font-mono">${row.billedAmount.toFixed(2)}</TableCell>
+                      <TableCell className="text-right font-mono text-rose-600">-${row.varianceAmount.toFixed(2)}</TableCell>
+                      <TableCell className={cn(
+                        "font-medium",
+                        row.agingDays > 120 ? "text-rose-600" : 
+                        row.agingDays > 60 ? "text-amber-600" : "text-muted-foreground"
+                      )}>
+                        {row.agingDays}d
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={
+                          row.status === 'Resolved' ? 'secondary' :
+                          row.status === 'Open' ? 'outline' :
+                          row.status === 'Under Appeal' ? 'default' : 'outline'
+                        } className={cn(
+                          "text-xs",
+                          row.status === 'Resolved' && "bg-emerald-100 text-emerald-700",
+                          row.status === 'Written Off' && "bg-gray-100 text-gray-600"
+                        )}>
+                          {row.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className={cn(
+                          "text-xs",
+                          row.priority === 'High' && "border-rose-500 text-rose-600",
+                          row.priority === 'Medium' && "border-amber-500 text-amber-600",
+                          row.priority === 'Low' && "border-gray-400 text-gray-500"
+                        )}>
+                          {row.priority}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-sm">{row.assignedAnalyst}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </ScrollArea>
+            
+            <div className="flex items-center justify-between mt-4 pt-4 border-t">
+              <div className="text-sm text-muted-foreground">
+                Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, filteredData.length)} of {formatNumber(filteredData.length)}
+              </div>
+              <div className="flex items-center gap-2">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  data-testid="button-prev-page"
+                >
+                  Previous
+                </Button>
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    let page: number;
+                    if (totalPages <= 5) {
+                      page = i + 1;
+                    } else if (currentPage <= 3) {
+                      page = i + 1;
+                    } else if (currentPage >= totalPages - 2) {
+                      page = totalPages - 4 + i;
+                    } else {
+                      page = currentPage - 2 + i;
+                    }
+                    return (
+                      <Button
+                        key={page}
+                        variant={currentPage === page ? "default" : "outline"}
+                        size="sm"
+                        className="w-8 h-8 p-0"
+                        onClick={() => setCurrentPage(page)}
+                      >
+                        {page}
+                      </Button>
+                    );
+                  })}
+                </div>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  data-testid="button-next-page"
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </DashboardLayout>
   );

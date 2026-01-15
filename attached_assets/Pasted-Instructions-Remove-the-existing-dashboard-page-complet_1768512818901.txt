@@ -1,0 +1,311 @@
+Instructions
+Remove the existing dashboard page completely and create a new Executive Payment Variance Dashboard for an ESRD (End-Stage Renal Disease) healthcare provider. This dashboard should be professional, data-rich, and designed for C-suite executives to monitor payment variances across the organization.
+
+Dashboard Requirements
+1. Top-Level Summary Cards (KPI Row)
+Create a row of 6 summary cards at the top of the dashboard displaying:
+CardMetricSample ValueTotal Open VariancesCount of unresolved payment variances19,118Total Variance AmountSum of all open variance dollars$42.7MNew This WeekVariances added in last 7 days2,285Resolved This WeekVariances closed in last 7 days2,234Avg Days to ResolutionAverage aging of resolved variances34.2 daysRecovery Rate% of variance dollars recovered78.3%
+Each card should:
+
+Display a trend indicator (up/down arrow with percentage vs prior period)
+Be clickable to filter the entire dashboard by that metric
+Use color coding (green for positive trends, red for negative)
+
+
+2. Seed Data Generation
+Generate realistic seed data with the following parameters:
+Payors (75 records):
+- Government Payors (25 records): 
+  - Medicare Traditional (5 regional MACs)
+  - Medicare Advantage (10 major plans: UHC MA, Humana MA, Aetna MA, etc.)
+  - Medicaid (10 high-volume states: CA, TX, FL, NY, PA, IL, OH, GA, NC, MI)
+  
+- Commercial Payors (50 records):
+  - Major National (15): UnitedHealthcare, Cigna, Aetna, Humana, Anthem, Kaiser, etc.
+  - Blue Cross Blue Shield variants (20): BCBS of Texas, BCBS of Florida, etc.
+  - Regional Plans (15): Various regional commercial insurers
+
+- Payor Types: Medicare Traditional, Medicare Advantage, Medicaid FFS, Medicaid Managed Care, Commercial HMO, Commercial PPO, Commercial EPO, VA, TRICARE
+States: 25 high-volume US states (CA, TX, FL, NY, PA, IL, OH, GA, NC, MI, NJ, VA, WA, AZ, MA, TN, IN, MO, MD, WI, CO, MN, SC, AL, LA)
+Root Cause Categories:
+- Authorization Issues (Missing auth, Expired auth, Auth limit exceeded)
+- Coding Errors (Incorrect CPT, Incorrect ICD-10, Modifier issues)
+- Contractual Disputes (Rate discrepancy, Fee schedule mismatch, Contract not loaded)
+- Claim Submission Errors (Duplicate claim, Missing information, Late filing)
+- Patient Eligibility (Coverage terminated, COB issues, Wrong plan)
+- Medical Necessity (LCD/NCD denial, Documentation insufficient)
+- Timely Filing (Past deadline, Appeal deadline missed)
+- System/Technical (EDI rejection, Payer system error, Clearinghouse issue)
+Aging Buckets:
+- 0-30 days
+- 31-60 days
+- 61-90 days
+- 91-120 days
+- 121-180 days
+- 181-365 days
+- 365+ days
+Generate 2,250 variance records with:
+
+Variance ID (unique identifier)
+Payor Name and Payor Type
+State
+Root Cause Category and Sub-category
+Billed Amount ($150 - $2,500 per treatment)
+Paid Amount
+Variance Amount (difference)
+Variance Percentage
+Date of Service
+Claim Submission Date
+Variance Identified Date
+Status (Open, In Progress, Under Appeal, Resolved, Written Off)
+Aging Bucket (calculated from Variance Identified Date)
+Assigned Analyst (pool of 15 analyst names)
+Priority (High, Medium, Low based on amount and aging)
+Treatment Count affected
+
+
+3. Main Dashboard Sections
+Section A: Variance by Payor Type (Horizontal Bar Chart)
+
+Show variance amount and count by payor type
+Sortable by amount or count
+Clickable to drill down to specific payors within that type
+
+Section B: Geographic Heat Map
+
+US map showing variance concentration by state (25 states with data)
+Color intensity based on total variance dollars
+Hover shows: State name, Total variances, Total amount, Top payor, Top root cause
+Click to drill down to state-specific details
+
+Section C: Root Cause Analysis (Treemap or Sunburst Chart)
+
+Hierarchical view: Root Cause Category → Sub-category
+Size based on variance amount
+Color based on resolution rate
+Clickable for drill-down
+
+Section D: Aging Analysis (Stacked Bar Chart)
+
+X-axis: Aging buckets
+Y-axis: Variance amount (stacked by root cause or payor type - toggle option)
+Show trend line for variance resolution velocity
+Highlight buckets exceeding SLA thresholds
+
+Section E: Trend Analysis (Line Chart with Area)
+
+12-month rolling view
+Lines for: New variances, Resolved variances, Net change
+Area showing cumulative open variance amount
+Weekly/Monthly toggle
+
+
+4. Drill-Down Detail Tables
+Create interactive data tables that appear when users click on any chart element:
+Variance Detail Table
+ColumnDescriptionVariance IDLink to full detail viewPayorName with type badgeState2-letter codeRoot CauseCategory with sub-category on hoverBilledCurrency formattedPaidCurrency formattedVarianceCurrency formatted with percentageAge (Days)Numeric with color codingStatusBadge with colorPriorityHigh/Med/Low indicatorAssigned ToAnalyst nameActionsView, Assign, Update Status buttons
+Features:
+
+Server-side pagination (25, 50, 100 rows per page)
+Multi-column sorting
+Advanced filtering panel
+Export to CSV/Excel
+Bulk actions (assign, update status, add note)
+
+
+5. Filter Panel (Left Sidebar or Top Collapsible)
+Global filters that affect all dashboard components:
+□ Date Range (with presets: This Week, This Month, This Quarter, YTD, Custom)
+□ Payor Type (multi-select checkboxes)
+□ Specific Payor (searchable dropdown - 75 payors)
+□ State (multi-select - 25 states)
+□ Root Cause Category (hierarchical multi-select)
+□ Aging Bucket (range slider or checkboxes)
+□ Variance Amount Range (min/max inputs)
+□ Status (multi-select)
+□ Priority (multi-select)
+□ Assigned Analyst (searchable dropdown - 15 analysts)
+Include:
+
+"Clear All Filters" button
+"Save Filter Set" functionality
+Active filter chips showing current selections
+
+
+6. Executive Summary Panel (Collapsible Top Section)
+AI-generated insights panel showing:
+📊 Key Insights This Week:
+- Medicare Advantage variances increased 23% driven by Humana authorization denials
+- Texas region showing 45% higher variance rate than national average
+- Coding errors resolution time improved by 5 days after new training program
+- Top 10 payors account for 68% of total variance dollars
+
+⚠️ Action Required:
+- 351 variances approaching timely filing deadline (next 14 days)
+- 134 high-priority variances unassigned
+- Cigna contract rate discrepancy affecting 68 claims - escalation recommended
+
+📈 Positive Trends:
+- Overall resolution rate improved 3.2% month-over-month
+- Average days to resolution decreased from 38 to 34 days
+- Recovery rate at highest level in 6 months
+
+7. Additional Drill-Down Views (Modal or Slide-Out Panels)
+Payor Deep Dive
+When clicking on a specific payor, show:
+
+Payor profile (contract details, effective dates, key contacts)
+Historical variance trend (24 months)
+Root cause breakdown for this payor
+State-by-state performance with this payor
+Comparison to similar payor types
+Contract terms vs actual payment analysis
+
+State Deep Dive
+When clicking on a state, show:
+
+All facilities in state with variance metrics
+Payor mix for that state
+Root cause distribution
+Comparison to national averages
+Regulatory notes (Medicaid specifics)
+
+Root Cause Deep Dive
+When clicking on a root cause, show:
+
+Trend over time
+Payors most affected
+States most affected
+Resolution rate and average time
+Recommended actions/playbook
+
+
+8. Technical Requirements
+Performance:
+
+Dashboard should load in under 2 seconds
+Lazy load drill-down data
+Implement data caching
+Use virtualized tables for large datasets
+
+Responsiveness:
+
+Desktop optimized (primary)
+Tablet compatible (secondary)
+Key metrics viewable on mobile
+
+Accessibility:
+
+WCAG 2.1 AA compliant
+Keyboard navigation
+Screen reader compatible
+Color-blind friendly palette
+
+Data Refresh:
+
+Show "Last Updated" timestamp
+Manual refresh button
+Auto-refresh toggle (5, 15, 30 min intervals)
+
+
+9. Visual Design Guidelines
+IMPORTANT: Inherit all visual styles from the parent application.
+The dashboard must seamlessly integrate with the existing application by using:
+Theme & Colors:
+- Use the parent app's existing color palette and theme variables
+- Apply the app's primary, secondary, accent, and semantic colors (success, warning, error, info)
+- Maintain consistency with the app's light/dark mode settings if applicable
+- Use existing CSS variables or theme tokens defined in the parent app
+
+Typography:
+- Use the same font family, weights, and sizes defined in the parent app
+- Follow the existing typographic scale for headings, body text, labels, and captions
+- Maintain consistent line heights and letter spacing
+
+Components:
+- Reuse existing UI components from the parent app (buttons, cards, inputs, dropdowns, modals, tables, badges, etc.)
+- Follow the same border radius, shadow, and spacing conventions
+- Use the app's existing icon library and icon style
+
+Layout & Spacing:
+- Follow the parent app's grid system and breakpoints
+- Use consistent padding and margin values from the existing design system
+- Align with the app's sidebar, header, and content area structure
+
+States & Interactions:
+- Apply the same hover, focus, active, and disabled states
+- Use consistent transition and animation styles
+- Follow existing patterns for loading states, empty states, and error states
+
+Data Visualization:
+- Use chart colors that complement the parent app's palette
+- If the app has existing charts, match their style (tooltips, legends, axes, gridlines)
+- Ensure charts are accessible and consistent with app aesthetics
+Before building, inspect the parent app to identify:
+
+CSS variables or theme configuration files
+Existing component library or UI framework in use
+Global styles and design tokens
+Any style guide or design system documentation
+
+
+10. Sample Data Distribution
+Ensure seed data reflects realistic distribution across the 2,250 records:
+By Payor Type (2,250 total records):
+- Medicare Traditional: 788 records (35%)
+- Medicare Advantage: 563 records (25%)
+- Medicaid: 450 records (20%)
+- Commercial: 405 records (18%)
+- Other Government: 44 records (2%)
+
+By Root Cause (2,250 total records):
+- Authorization Issues: 630 records (28%)
+- Contractual Disputes: 495 records (22%)
+- Coding Errors: 405 records (18%)
+- Patient Eligibility: 338 records (15%)
+- Medical Necessity: 225 records (10%)
+- Other: 157 records (7%)
+
+By Aging (2,250 total records):
+- 0-30 days: 563 records (25%)
+- 31-60 days: 495 records (22%)
+- 61-90 days: 405 records (18%)
+- 91-120 days: 338 records (15%)
+- 121-180 days: 270 records (12%)
+- 181-365 days: 135 records (6%)
+- 365+ days: 44 records (2%)
+
+By Status (2,250 total records):
+- Open: 1,013 records (45%)
+- In Progress: 675 records (30%)
+- Under Appeal: 338 records (15%)
+- Resolved: 180 records (8%)
+- Written Off: 44 records (2%)
+
+By State (top 10 of 25 states):
+- California: 270 records (12%)
+- Texas: 248 records (11%)
+- Florida: 225 records (10%)
+- New York: 180 records (8%)
+- Pennsylvania: 158 records (7%)
+- Illinois: 135 records (6%)
+- Ohio: 113 records (5%)
+- Georgia: 90 records (4%)
+- North Carolina: 90 records (4%)
+- Michigan: 68 records (3%)
+- Remaining 15 states: 673 records (30%)
+
+Implementation Notes
+
+Remove all existing dashboard code before implementing this new dashboard
+First, analyze the parent app's design system - inspect existing styles, components, and theme before writing any new code
+Use the same React charting library already in use in the parent app, or select one that matches the existing visual style
+Implement proper state management consistent with the parent app's patterns
+Reuse existing components wherever possible; extend only when necessary
+Add loading skeletons that match the parent app's loading patterns
+Include error states and empty states consistent with existing app patterns
+Add tooltips using the same tooltip component/style from the parent app
+Ensure the new dashboard navigation integrates seamlessly with existing app navigation
+
+
+End of Prompt
