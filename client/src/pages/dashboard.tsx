@@ -1,4 +1,5 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
+import { USMap } from "@/components/USMap";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -419,10 +420,23 @@ export default function Dashboard() {
                 <Users className="h-5 w-5" />
                 Variance by Payor Type
               </CardTitle>
-              <CardDescription>Total variance amount by insurance category</CardDescription>
+              <CardDescription>
+                Click a bar to filter • Click outside to clear
+                {selectedPayorType !== "all" && (
+                  <Badge variant="secondary" className="ml-2">{selectedPayorType}</Badge>
+                )}
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="h-[300px]">
+              <div 
+                className="h-[300px]"
+                onClick={(e) => {
+                  const target = e.target as HTMLElement;
+                  if (!target.closest('.recharts-bar-rectangle') && selectedPayorType !== "all") {
+                    setSelectedPayorType("all");
+                  }
+                }}
+              >
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={payorTypeData} layout="vertical" margin={{ top: 0, right: 30, left: 120, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="hsl(var(--border))" />
@@ -437,13 +451,23 @@ export default function Dashboard() {
                       dataKey="amount" 
                       radius={[0, 4, 4, 0]} 
                       barSize={20}
-                      onClick={(data) => {
-                        setSelectedPayorType(data.type);
+                      onClick={(data, index, e) => {
+                        e?.stopPropagation();
+                        if (selectedPayorType === data.type) {
+                          setSelectedPayorType("all");
+                        } else {
+                          setSelectedPayorType(data.type);
+                        }
                       }}
                       cursor="pointer"
                     >
                       {payorTypeData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        <Cell 
+                          key={`cell-${index}`} 
+                          fill={selectedPayorType === entry.type ? 'hsl(196, 100%, 30%)' : COLORS[index % COLORS.length]} 
+                          stroke={selectedPayorType === entry.type ? 'hsl(196, 100%, 20%)' : 'none'}
+                          strokeWidth={selectedPayorType === entry.type ? 2 : 0}
+                        />
                       ))}
                     </Bar>
                   </BarChart>
@@ -456,34 +480,36 @@ export default function Dashboard() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <MapPin className="h-5 w-5" />
-                Top States by Variance
+                Geographic Distribution
               </CardTitle>
-              <CardDescription>Geographic distribution of payment variances</CardDescription>
+              <CardDescription>
+                Click a state to filter • Click outside to clear
+                {selectedState !== "all" && (
+                  <Badge variant="secondary" className="ml-2">{selectedState}</Badge>
+                )}
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="h-[300px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={stateData.slice(0, 10)} layout="vertical" margin={{ top: 0, right: 30, left: 50, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="hsl(var(--border))" />
-                    <XAxis type="number" tickFormatter={(v) => formatCurrency(v)} stroke="hsl(var(--muted-foreground))" fontSize={11} />
-                    <YAxis type="category" dataKey="state" stroke="hsl(var(--muted-foreground))" fontSize={11} width={40} />
-                    <Tooltip 
-                      cursor={{ fill: 'hsl(var(--muted)/0.3)' }}
-                      contentStyle={{ backgroundColor: 'hsl(var(--card))', borderRadius: '8px', border: '1px solid hsl(var(--border))' }}
-                      formatter={(value: number, name: string, props: any) => [formatCurrency(value), props.payload.stateName]}
-                    />
-                    <Bar 
-                      dataKey="amount" 
-                      fill="hsl(var(--primary))" 
-                      radius={[0, 4, 4, 0]} 
-                      barSize={20}
-                      onClick={(data) => {
-                        setSelectedState(data.state);
-                      }}
-                      cursor="pointer"
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
+              <div 
+                className="h-[300px]"
+                onClick={(e) => {
+                  if (e.target === e.currentTarget && selectedState !== "all") {
+                    setSelectedState("all");
+                  }
+                }}
+              >
+                <USMap
+                  data={stateData}
+                  selectedState={selectedState === "all" ? null : selectedState}
+                  onStateClick={(stateCode) => {
+                    if (selectedState === stateCode) {
+                      setSelectedState("all");
+                    } else {
+                      setSelectedState(stateCode);
+                    }
+                  }}
+                  formatCurrency={formatCurrency}
+                />
               </div>
             </CardContent>
           </Card>
@@ -493,10 +519,23 @@ export default function Dashboard() {
           <Card>
             <CardHeader>
               <CardTitle>Root Cause Analysis</CardTitle>
-              <CardDescription>Variance distribution by denial reason</CardDescription>
+              <CardDescription>
+                Click a segment to filter • Click outside to clear
+                {selectedRootCause !== "all" && (
+                  <Badge variant="secondary" className="ml-2">{selectedRootCause}</Badge>
+                )}
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="h-[300px]">
+              <div 
+                className="h-[300px]"
+                onClick={(e) => {
+                  const target = e.target as HTMLElement;
+                  if (!target.closest('.recharts-pie-sector') && selectedRootCause !== "all") {
+                    setSelectedRootCause("all");
+                  }
+                }}
+              >
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
@@ -508,13 +547,24 @@ export default function Dashboard() {
                       outerRadius={100}
                       innerRadius={40}
                       paddingAngle={2}
-                      onClick={(data) => {
-                        setSelectedRootCause(data.category);
+                      onClick={(data, index, e) => {
+                        e?.stopPropagation();
+                        if (selectedRootCause === data.category) {
+                          setSelectedRootCause("all");
+                        } else {
+                          setSelectedRootCause(data.category);
+                        }
                       }}
                       cursor="pointer"
                     >
                       {rootCauseData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        <Cell 
+                          key={`cell-${index}`} 
+                          fill={COLORS[index % COLORS.length]} 
+                          stroke={selectedRootCause === entry.category ? 'hsl(var(--foreground))' : 'none'}
+                          strokeWidth={selectedRootCause === entry.category ? 3 : 0}
+                          opacity={selectedRootCause === "all" || selectedRootCause === entry.category ? 1 : 0.4}
+                        />
                       ))}
                     </Pie>
                     <Tooltip 
