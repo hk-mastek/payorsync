@@ -219,7 +219,9 @@ export interface VarianceRecord {
 
 export function generateVarianceData(count: number = 2250): VarianceRecord[] {
   const records: VarianceRecord[] = [];
-  const baseDate = new Date('2025-01-15');
+  const startDate = new Date('2024-12-01');
+  const endDate = new Date('2025-12-31');
+  const dateRange = endDate.getTime() - startDate.getTime();
   
   for (let i = 0; i < count; i++) {
     const seed = i + 1;
@@ -239,9 +241,9 @@ export function generateVarianceData(count: number = 2250): VarianceRecord[] {
     const varianceAmount = Math.round(billedAmount * (variancePercentage / 100) * 100) / 100;
     const paidAmount = Math.round((billedAmount - varianceAmount) * 100) / 100;
     
-    const agingDays = agingBucket.min + Math.floor(seededRandom(seed * 10) * (agingBucket.max - agingBucket.min));
-    const varianceDate = new Date(baseDate);
-    varianceDate.setDate(varianceDate.getDate() - agingDays);
+    const varianceDate = new Date(startDate.getTime() + seededRandom(seed * 10) * dateRange);
+    
+    const agingDays = agingBucket.min + Math.floor(seededRandom(seed * 13) * (agingBucket.max - agingBucket.min));
     
     const dosDate = new Date(varianceDate);
     dosDate.setDate(dosDate.getDate() - Math.floor(seededRandom(seed * 11) * 30) - 7);
