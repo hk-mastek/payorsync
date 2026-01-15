@@ -384,14 +384,15 @@ export function groupByAgingBucket(data: VarianceRecord[]) {
 
 export function getTrendData(data: VarianceRecord[]) {
   const months: Record<string, { new: number; resolved: number; amount: number }> = {};
-  const baseDate = new Date('2025-01-15');
   
-  for (let i = 11; i >= 0; i--) {
-    const date = new Date(baseDate);
-    date.setMonth(date.getMonth() - i);
-    const key = date.toISOString().slice(0, 7);
+  const trendMonths = [
+    '2024-12', '2025-01', '2025-02', '2025-03', '2025-04', '2025-05',
+    '2025-06', '2025-07', '2025-08', '2025-09', '2025-10', '2025-11', '2025-12'
+  ];
+  
+  trendMonths.forEach(key => {
     months[key] = { new: 0, resolved: 0, amount: 0 };
-  }
+  });
   
   data.forEach(v => {
     const month = v.varianceIdentifiedDate.slice(0, 7);
@@ -402,9 +403,9 @@ export function getTrendData(data: VarianceRecord[]) {
     }
   });
   
-  return Object.entries(months).map(([month, data]) => ({
+  return trendMonths.map(month => ({
     month: new Date(month + '-01').toLocaleDateString('en-US', { month: 'short', year: '2-digit' }),
-    ...data,
-    net: data.new - data.resolved,
+    ...months[month],
+    net: months[month].new - months[month].resolved,
   }));
 }
