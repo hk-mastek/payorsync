@@ -153,7 +153,7 @@ export default function Dashboard() {
         const query = searchQuery.toLowerCase();
         return v.id.toLowerCase().includes(query) ||
                v.payorName.toLowerCase().includes(query) ||
-               v.assignedAnalyst.toLowerCase().includes(query);
+               v.patientName.toLowerCase().includes(query);
       }
       return true;
     });
@@ -393,7 +393,7 @@ export default function Dashboard() {
             </Select>
             
             <Input
-              placeholder="Search ID, Payor, Analyst..."
+              placeholder="Search ID, Payor, Patient..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-[200px]"
@@ -723,7 +723,7 @@ export default function Dashboard() {
                     <TableHead className="w-[80px]">Age</TableHead>
                     <TableHead className="w-[100px]">Status</TableHead>
                     <TableHead className="w-[70px]">Priority</TableHead>
-                    <TableHead>Analyst</TableHead>
+                    <TableHead>Patient</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -775,7 +775,7 @@ export default function Dashboard() {
                           {row.priority}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-sm">{row.assignedAnalyst}</TableCell>
+                      <TableCell className="text-sm">{row.patientName}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

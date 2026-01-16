@@ -160,10 +160,15 @@ export const STATUSES = [
   { value: 'Written Off', weight: 2 },
 ];
 
-export const ANALYSTS = [
-  'Sarah Johnson', 'Michael Chen', 'Emily Rodriguez', 'James Williams', 'Jessica Martinez',
-  'David Thompson', 'Amanda Garcia', 'Christopher Lee', 'Ashley Brown', 'Matthew Wilson',
-  'Lauren Davis', 'Ryan Miller', 'Stephanie Taylor', 'Kevin Anderson', 'Michelle Thomas'
+export const PATIENT_NAMES = [
+  'Robert Smith', 'Maria Garcia', 'James Johnson', 'Patricia Williams', 'Michael Brown',
+  'Linda Jones', 'William Davis', 'Elizabeth Miller', 'David Wilson', 'Barbara Moore',
+  'Richard Taylor', 'Susan Anderson', 'Joseph Thomas', 'Jessica Jackson', 'Thomas White',
+  'Sarah Harris', 'Charles Martin', 'Karen Thompson', 'Christopher Garcia', 'Nancy Martinez',
+  'Daniel Robinson', 'Betty Clark', 'Matthew Rodriguez', 'Margaret Lewis', 'Anthony Lee',
+  'Sandra Walker', 'Mark Hall', 'Dorothy Allen', 'Donald Young', 'Lisa Hernandez',
+  'Steven King', 'Ashley Wright', 'Paul Lopez', 'Kimberly Hill', 'Andrew Scott',
+  'Emily Green', 'Joshua Adams', 'Donna Baker', 'Kenneth Gonzalez', 'Michelle Nelson'
 ];
 
 export const PAYOR_TYPES = [
@@ -212,7 +217,7 @@ export interface VarianceRecord {
   status: string;
   agingBucket: string;
   agingDays: number;
-  assignedAnalyst: string;
+  patientName: string;
   priority: 'High' | 'Medium' | 'Low';
   treatmentCount: number;
 }
@@ -274,7 +279,7 @@ export function generateVarianceData(count: number = 2250): VarianceRecord[] {
       status: status.value,
       agingBucket: agingBucket.label,
       agingDays,
-      assignedAnalyst: ANALYSTS[Math.floor(seededRandom(seed * 13) * ANALYSTS.length)],
+      patientName: PATIENT_NAMES[Math.floor(seededRandom(seed * 15) * PATIENT_NAMES.length)],
       priority,
       treatmentCount: 1 + Math.floor(seededRandom(seed * 14) * 5),
     });
