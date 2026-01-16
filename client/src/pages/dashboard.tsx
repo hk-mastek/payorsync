@@ -140,7 +140,7 @@ export default function Dashboard() {
   const [detailItem, setDetailItem] = useState<string | null>(null);
   
   const SCALE_FACTOR = 324;
-  const WEEKLY_VARIANCES = 13000;
+  const WEEKLY_VARIANCES = 13696;
   const allData = useMemo(() => generateVarianceData(2250), []);
   
   const filteredData = useMemo(() => {
