@@ -48,7 +48,6 @@ const STATIC_FUNNEL = [
   { stage: 'Total Variances', count: 2250, amount: 18500000 },
   { stage: 'Under Review', count: 875, amount: 7200000 },
   { stage: 'Appealed', count: 425, amount: 3500000 },
-  { stage: 'Resolved', count: 638, amount: 5250000 },
   { stage: 'Written Off', count: 312, amount: 1850000 },
 ];
 
