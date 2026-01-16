@@ -240,6 +240,17 @@ export default function WriteOffs() {
             </CardHeader>
             <CardContent className="pt-0">
               <div className="space-y-3">
+                <div className="flex items-center justify-between p-3 bg-purple-50 dark:bg-purple-950/20 rounded-lg border border-purple-200 dark:border-purple-900">
+                  <div>
+                    <p className="font-medium text-purple-700 dark:text-purple-400 text-sm">Timely Filing Risk</p>
+                    <p className="text-xs text-purple-600/80 dark:text-purple-400/80">150+ days, unresolved</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xl font-bold text-purple-700 dark:text-purple-400" data-testid="text-timely-filing-risk">{STATIC_PREDICTIVE.timelyFilingRisk}</p>
+                    <p className="text-xs text-purple-600/80 dark:text-purple-400/80">Immediate action needed</p>
+                  </div>
+                </div>
+
                 <div className="flex items-center justify-between p-3 bg-red-50 dark:bg-red-950/20 rounded-lg border border-red-200 dark:border-red-900">
                   <div>
                     <p className="font-medium text-red-700 dark:text-red-400 text-sm">At-Risk Variances</p>
@@ -254,22 +265,11 @@ export default function WriteOffs() {
                 <div className="flex items-center justify-between p-3 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-900">
                   <div>
                     <p className="font-medium text-amber-700 dark:text-amber-400 text-sm">Projected Write-Offs</p>
-                    <p className="text-xs text-amber-600/80 dark:text-amber-400/80">Based on historical patterns</p>
+                    <p className="text-xs text-amber-600/80 dark:text-amber-400/80">High number of re-submissions</p>
                   </div>
                   <div className="text-right">
                     <p className="text-xl font-bold text-amber-700 dark:text-amber-400" data-testid="text-projected-writeoffs">{STATIC_PREDICTIVE.projectedWriteOffs}</p>
                     <p className="text-xs text-amber-600/80 dark:text-amber-400/80">${Math.round(STATIC_PREDICTIVE.projectedAmount / 1000)}K</p>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between p-3 bg-purple-50 dark:bg-purple-950/20 rounded-lg border border-purple-200 dark:border-purple-900">
-                  <div>
-                    <p className="font-medium text-purple-700 dark:text-purple-400 text-sm">Timely Filing Risk</p>
-                    <p className="text-xs text-purple-600/80 dark:text-purple-400/80">150+ days, unresolved</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xl font-bold text-purple-700 dark:text-purple-400" data-testid="text-timely-filing-risk">{STATIC_PREDICTIVE.timelyFilingRisk}</p>
-                    <p className="text-xs text-purple-600/80 dark:text-purple-400/80">Immediate action needed</p>
                   </div>
                 </div>
               </div>
