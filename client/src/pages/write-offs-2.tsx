@@ -422,48 +422,7 @@ export default function WriteOffs2() {
           </Card>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-2">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Write-Off by Reason</CardTitle>
-              <CardDescription className="text-xs">Primary reasons for write-offs</CardDescription>
-            </CardHeader>
-            <CardContent className="pt-0">
-              <div className="h-[280px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
-                    <Pie
-                      data={STATIC_REASONS}
-                      cx="35%"
-                      cy="50%"
-                      innerRadius={45}
-                      outerRadius={80}
-                      fill="#8884d8"
-                      paddingAngle={2}
-                      dataKey="amount"
-                      nameKey="reason"
-                    >
-                      {STATIC_REASONS.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip 
-                      contentStyle={{ backgroundColor: 'hsl(var(--card))', borderRadius: '8px', border: '1px solid hsl(var(--border))', fontSize: '12px' }}
-                      formatter={(value: number, name: string) => [formatCurrency(value), name]}
-                    />
-                    <Legend 
-                      layout="vertical" 
-                      align="right" 
-                      verticalAlign="middle" 
-                      wrapperStyle={{ fontSize: '10px', right: 0 }}
-                      formatter={(value) => value.length > 15 ? value.substring(0, 15) + '...' : value}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
-
+        <div className="grid gap-6 lg:grid-cols-1">
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-base">Write-Offs by Payor Type</CardTitle>
