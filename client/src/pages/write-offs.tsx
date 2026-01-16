@@ -1,16 +1,13 @@
-import { useState, useMemo } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   DollarSign,
   TrendingDown,
   Clock,
   RefreshCw,
   AlertTriangle,
-  Target,
-  Filter
+  Target
 } from "lucide-react";
 import {
   BarChart,
@@ -30,7 +27,6 @@ import {
   ComposedChart,
   Line
 } from "recharts";
-import { PAYORS } from "@shared/dashboardData";
 
 const COLORS = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#84cc16'];
 const FUNNEL_COLORS = ['#3b82f6', '#60a5fa', '#93c5fd', '#22c55e', '#ef4444'];
@@ -103,9 +99,6 @@ const STATIC_PAYORS = [
 ];
 
 export default function WriteOffs() {
-  const [selectedPayor, setSelectedPayor] = useState<string>("all");
-  const [selectedReason, setSelectedReason] = useState<string>("all");
-
   const formatCurrency = (value: number) => {
     if (value >= 1000000) return `$${Math.round(value / 1000000)}M`;
     if (value >= 1000) return `$${Math.round(value / 1000)}K`;
@@ -115,36 +108,9 @@ export default function WriteOffs() {
   return (
     <DashboardLayout>
       <div className="space-y-6 p-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight" data-testid="text-page-title">Write-Off Analysis</h1>
-            <p className="text-muted-foreground mt-1">Track write-off trends, recovery potential, and root cause analysis</p>
-          </div>
-          <div className="flex items-center gap-3">
-            <Select value={selectedPayor} onValueChange={setSelectedPayor}>
-              <SelectTrigger className="w-[180px]" data-testid="select-payor-filter">
-                <Filter className="h-4 w-4 mr-2" />
-                <SelectValue placeholder="Filter by Payor" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Payors</SelectItem>
-                {PAYORS.map(p => (
-                  <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={selectedReason} onValueChange={setSelectedReason}>
-              <SelectTrigger className="w-[200px]" data-testid="select-reason-filter">
-                <SelectValue placeholder="Filter by Reason" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Reasons</SelectItem>
-                {STATIC_REASONS.map(r => (
-                  <SelectItem key={r.reason} value={r.reason}>{r.reason}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight" data-testid="text-page-title">Write-Off Analysis</h1>
+          <p className="text-muted-foreground mt-1">Track write-off trends, recovery potential, and root cause analysis</p>
         </div>
 
         <div className="grid gap-4 md:grid-cols-3">
