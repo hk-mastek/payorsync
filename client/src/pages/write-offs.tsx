@@ -32,70 +32,70 @@ const COLORS = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'
 const FUNNEL_COLORS = ['#3b82f6', '#60a5fa', '#93c5fd', '#22c55e', '#ef4444'];
 
 const STATIC_KPI = {
-  totalWriteOffAmount: 1850000,
-  writeOffCount: 312,
+  totalWriteOffAmount: 599400000,
+  writeOffCount: 101088,
   writeOffRate: 13.9,
   avgDaysToWriteOff: 127,
-  potentialRecovery: 425000,
-  recoverableCount: 89,
+  potentialRecovery: 137700000,
+  recoverableCount: 28836,
 };
 
 const STATIC_FUNNEL = [
-  { stage: 'Total Variances', count: 2250, amount: 18500000 },
-  { stage: 'Under Review', count: 875, amount: 7200000 },
-  { stage: 'Appealed', count: 425, amount: 3500000 },
-  { stage: 'Written Off', count: 312, amount: 1850000 },
+  { stage: 'Total Variances', count: 729000, amount: 5994000000 },
+  { stage: 'Under Review', count: 283500, amount: 2332800000 },
+  { stage: 'Appealed', count: 137700, amount: 1134000000 },
+  { stage: 'Written Off', count: 101088, amount: 599400000 },
 ];
 
 const STATIC_PREDICTIVE = {
-  atRiskCount: 156,
-  atRiskAmount: 1280000,
-  projectedWriteOffs: 62,
-  projectedAmount: 512000,
-  timelyFilingRisk: 43,
+  atRiskCount: 50544,
+  atRiskAmount: 414720000,
+  projectedWriteOffs: 20088,
+  projectedAmount: 165888000,
+  timelyFilingRisk: 13932,
 };
 
 const STATIC_ROOT_CAUSE = [
-  { category: 'Rate Discrepancy', count: 78, amount: 485000 },
-  { category: 'Coding Error', count: 65, amount: 378000 },
-  { category: 'Auth Denial', count: 52, amount: 312000 },
-  { category: 'Timely Filing', count: 48, amount: 295000 },
-  { category: 'Medical Necessity', count: 35, amount: 198000 },
-  { category: 'Coverage Terminated', count: 34, amount: 182000 },
+  { category: 'Rate Discrepancy', count: 25272, amount: 157140000 },
+  { category: 'Coding Error', count: 21060, amount: 122472000 },
+  { category: 'Auth Denial', count: 16848, amount: 101088000 },
+  { category: 'Timely Filing', count: 15552, amount: 95580000 },
+  { category: 'Medical Necessity', count: 11340, amount: 64152000 },
+  { category: 'Coverage Terminated', count: 11016, amount: 58968000 },
 ];
 
 const STATIC_AGING = [
-  { bucket: '0-30', count: 12, amount: 45000 },
-  { bucket: '31-60', count: 28, amount: 125000 },
-  { bucket: '61-90', count: 45, amount: 215000 },
-  { bucket: '91-120', count: 68, amount: 385000 },
-  { bucket: '121-180', count: 89, amount: 520000 },
-  { bucket: '181-365', count: 52, amount: 385000 },
-  { bucket: '365+', count: 18, amount: 175000 },
+  { bucket: '0-30', count: 3888, amount: 14580000 },
+  { bucket: '31-60', count: 9072, amount: 40500000 },
+  { bucket: '61-90', count: 14580, amount: 69660000 },
+  { bucket: '91-120', count: 22032, amount: 124740000 },
+  { bucket: '121-180', count: 28836, amount: 168480000 },
+  { bucket: '181-365', count: 16848, amount: 124740000 },
+  { bucket: '365+', count: 5832, amount: 56700000 },
 ];
 
 const STATIC_REASONS = [
-  { reason: 'Timely Filing Expired', count: 78, amount: 462000 },
-  { reason: 'Appeal Exhausted', count: 69, amount: 407000 },
-  { reason: 'Contractual Adjustment', count: 56, amount: 333000 },
-  { reason: 'Patient Responsibility', count: 37, amount: 222000 },
-  { reason: 'Coordination of Benefits', count: 31, amount: 185000 },
-  { reason: 'Provider Error', count: 25, amount: 148000 },
-  { reason: 'Payer Insolvency', count: 10, amount: 56000 },
-  { reason: 'Small Balance', count: 6, amount: 37000 },
+  { reason: 'Timely Filing Expired', count: 25272, amount: 149688000 },
+  { reason: 'Appeal Exhausted', count: 22356, amount: 131868000 },
+  { reason: 'Contractual Adjustment', count: 18144, amount: 107892000 },
+  { reason: 'Patient Responsibility', count: 11988, amount: 71928000 },
+  { reason: 'Coordination of Benefits', count: 10044, amount: 59940000 },
+  { reason: 'Provider Error', count: 8100, amount: 47952000 },
+  { reason: 'Payer Insolvency', count: 3240, amount: 18144000 },
+  { reason: 'Small Balance', count: 1944, amount: 11988000 },
 ];
 
 const STATIC_PAYORS = [
-  { payorName: 'Aetna', count: 48, amount: 285000, avgDays: 132 },
-  { payorName: 'UnitedHealth', count: 42, amount: 248000, avgDays: 118 },
-  { payorName: 'Cigna', count: 38, amount: 225000, avgDays: 142 },
-  { payorName: 'Humana', count: 35, amount: 198000, avgDays: 125 },
-  { payorName: 'Blue Cross', count: 32, amount: 188000, avgDays: 135 },
-  { payorName: 'Medicare', count: 28, amount: 165000, avgDays: 108 },
-  { payorName: 'Anthem', count: 25, amount: 148000, avgDays: 145 },
-  { payorName: 'Kaiser', count: 22, amount: 132000, avgDays: 122 },
-  { payorName: 'Molina', count: 18, amount: 108000, avgDays: 138 },
-  { payorName: 'Centene', count: 14, amount: 85000, avgDays: 128 },
+  { payorName: 'Aetna', count: 15552, amount: 92340000, avgDays: 132 },
+  { payorName: 'UnitedHealth', count: 13608, amount: 80352000, avgDays: 118 },
+  { payorName: 'Cigna', count: 12312, amount: 72900000, avgDays: 142 },
+  { payorName: 'Humana', count: 11340, amount: 64152000, avgDays: 125 },
+  { payorName: 'Blue Cross', count: 10368, amount: 60912000, avgDays: 135 },
+  { payorName: 'Medicare', count: 9072, amount: 53460000, avgDays: 108 },
+  { payorName: 'Anthem', count: 8100, amount: 47952000, avgDays: 145 },
+  { payorName: 'Kaiser', count: 7128, amount: 42768000, avgDays: 122 },
+  { payorName: 'Molina', count: 5832, amount: 34992000, avgDays: 138 },
+  { payorName: 'Centene', count: 4536, amount: 27540000, avgDays: 128 },
 ];
 
 export default function WriteOffs() {

@@ -139,6 +139,8 @@ export default function Dashboard() {
   const [detailView, setDetailView] = useState<'payor' | 'state' | 'rootCause' | null>(null);
   const [detailItem, setDetailItem] = useState<string | null>(null);
   
+  const SCALE_FACTOR = 324;
+  const WEEKLY_VARIANCES = 13000;
   const allData = useMemo(() => generateVarianceData(2250), []);
   
   const filteredData = useMemo(() => {
@@ -157,12 +159,57 @@ export default function Dashboard() {
     });
   }, [allData, selectedPayorType, selectedState, selectedStatus, selectedRootCause, searchQuery]);
   
-  const kpis = useMemo(() => calculateKPIs(filteredData), [filteredData]);
-  const payorTypeData = useMemo(() => groupByPayorType(filteredData), [filteredData]);
-  const stateData = useMemo(() => groupByState(filteredData), [filteredData]);
-  const rootCauseData = useMemo(() => groupByRootCause(filteredData), [filteredData]);
-  const agingData = useMemo(() => groupByAgingBucket(filteredData), [filteredData]);
-  const trendData = useMemo(() => getTrendData(allData), [allData]);
+  const rawKpis = useMemo(() => calculateKPIs(filteredData), [filteredData]);
+  const kpis = useMemo(() => ({
+    totalOpenVariances: Math.round(rawKpis.totalOpenVariances * SCALE_FACTOR),
+    totalVarianceAmount: Math.round(rawKpis.totalVarianceAmount * SCALE_FACTOR),
+    newThisWeek: WEEKLY_VARIANCES,
+    resolvedThisWeek: Math.round(WEEKLY_VARIANCES * 0.72),
+    avgDaysToResolution: rawKpis.avgDaysToResolution,
+    recoveryRate: rawKpis.recoveryRate,
+  }), [rawKpis, SCALE_FACTOR, WEEKLY_VARIANCES]);
+  
+  const rawPayorTypeData = useMemo(() => groupByPayorType(filteredData), [filteredData]);
+  const payorTypeData = useMemo(() => rawPayorTypeData.map(p => ({
+    ...p,
+    count: Math.round(p.count * SCALE_FACTOR),
+    amount: Math.round(p.amount * SCALE_FACTOR),
+  })), [rawPayorTypeData, SCALE_FACTOR]);
+  
+  const rawStateData = useMemo(() => groupByState(filteredData), [filteredData]);
+  const stateData = useMemo(() => rawStateData.map(s => ({
+    ...s,
+    count: Math.round(s.count * SCALE_FACTOR),
+    amount: Math.round(s.amount * SCALE_FACTOR),
+  })), [rawStateData, SCALE_FACTOR]);
+  
+  const rawRootCauseData = useMemo(() => groupByRootCause(filteredData), [filteredData]);
+  const rootCauseData = useMemo(() => rawRootCauseData.map(rc => ({
+    ...rc,
+    count: Math.round(rc.count * SCALE_FACTOR),
+    amount: Math.round(rc.amount * SCALE_FACTOR),
+    subcategories: rc.subcategories.map(sub => ({
+      ...sub,
+      count: Math.round(sub.count * SCALE_FACTOR),
+      amount: Math.round(sub.amount * SCALE_FACTOR),
+    })),
+  })), [rawRootCauseData, SCALE_FACTOR]);
+  
+  const rawAgingData = useMemo(() => groupByAgingBucket(filteredData), [filteredData]);
+  const agingData = useMemo(() => rawAgingData.map(a => ({
+    ...a,
+    count: Math.round(a.count * SCALE_FACTOR),
+    amount: Math.round(a.amount * SCALE_FACTOR),
+  })), [rawAgingData, SCALE_FACTOR]);
+  
+  const rawTrendData = useMemo(() => getTrendData(allData), [allData]);
+  const trendData = useMemo(() => rawTrendData.map(t => ({
+    ...t,
+    new: Math.round(t.new * SCALE_FACTOR),
+    resolved: Math.round(t.resolved * SCALE_FACTOR),
+    amount: Math.round(t.amount * SCALE_FACTOR),
+    net: Math.round(t.net * SCALE_FACTOR),
+  })), [rawTrendData, SCALE_FACTOR]);
   
   const paginatedData = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
