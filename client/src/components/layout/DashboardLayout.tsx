@@ -125,7 +125,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     { name: 'Contracts', href: '/contracts', icon: FileText },
     { name: 'Drafting', href: '/drafter', icon: PenTool },
     { name: 'Library', href: '/clause-library', icon: BookOpen },
-    { name: 'Write-Off Analysis 2', href: '/write-offs-2', icon: TrendingDown },
+    { name: 'Write-Off Analysis', href: '/write-offs-2', icon: TrendingDown },
     { name: 'Governance', href: '/governance', icon: ShieldCheck },
     { name: 'Settings', href: '/settings', icon: Settings },
   ];

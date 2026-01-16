@@ -183,7 +183,7 @@ export default function WriteOffs2() {
     <DashboardLayout>
       <div className="space-y-6 p-6">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight" data-testid="text-page-title">Write-Off Analysis 2</h1>
+          <h1 className="text-3xl font-bold tracking-tight" data-testid="text-page-title">Write-Off Analysis</h1>
           <p className="text-muted-foreground mt-1">Track write-off trends, recovery potential, and root cause analysis</p>
         </div>
 
