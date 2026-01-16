@@ -162,6 +162,23 @@ export default function Dashboard() {
     });
   }, [allData, selectedPayorType, selectedState, selectedStatus, selectedRootCause, searchQuery]);
   
+  // Separate data source for state chart - applies all filters EXCEPT state filter
+  // This ensures the chart always shows all 50 states for comparison
+  const stateChartData = useMemo(() => {
+    return allData.filter(v => {
+      if (selectedPayorType !== "all" && v.payorType !== selectedPayorType) return false;
+      if (selectedStatus !== "all" && v.status !== selectedStatus) return false;
+      if (selectedRootCause !== "all" && v.rootCauseCategory !== selectedRootCause) return false;
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase();
+        return v.id.toLowerCase().includes(query) ||
+               v.payorName.toLowerCase().includes(query) ||
+               v.patientName.toLowerCase().includes(query);
+      }
+      return true;
+    });
+  }, [allData, selectedPayorType, selectedStatus, selectedRootCause, searchQuery]);
+  
   const rawKpis = useMemo(() => calculateKPIs(filteredData), [filteredData]);
   const kpis = useMemo(() => ({
     totalOpenVariances: Math.round(rawKpis.totalOpenVariances * SCALE_FACTOR),
@@ -201,7 +218,7 @@ export default function Dashboard() {
     }));
   }, [rawSunburstData, sunburstSelectedType, SCALE_FACTOR]);
   
-  const rawStateData = useMemo(() => groupByState(filteredData), [filteredData]);
+  const rawStateData = useMemo(() => groupByState(stateChartData), [stateChartData]);
   const stateData = useMemo(() => rawStateData.map(s => ({
     ...s,
     count: Math.round(s.count * SCALE_FACTOR),
@@ -256,6 +273,7 @@ export default function Dashboard() {
     setSelectedStatus("all");
     setSelectedRootCause("all");
     setSearchQuery("");
+    setHighlightedState(null);
   };
   
   const hasActiveFilters = selectedPayorType !== "all" || selectedState !== "all" || 
@@ -512,6 +530,7 @@ export default function Dashboard() {
                     const target = e.target as HTMLElement;
                     if (!target.closest('.recharts-bar-rectangle') && highlightedState) {
                       setHighlightedState(null);
+                      setSelectedState("all");
                     }
                   }}
                 >
@@ -545,8 +564,10 @@ export default function Dashboard() {
                           e?.stopPropagation();
                           if (highlightedState === data.state) {
                             setHighlightedState(null);
+                            setSelectedState("all");
                           } else {
                             setHighlightedState(data.state);
+                            setSelectedState(data.state);
                           }
                         }}
                       >
