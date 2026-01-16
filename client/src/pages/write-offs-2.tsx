@@ -334,9 +334,13 @@ export default function WriteOffs2() {
                     <Tooltip 
                       contentStyle={{ backgroundColor: 'hsl(var(--card))', borderRadius: '8px', border: '1px solid hsl(var(--border))', fontSize: '12px' }}
                       formatter={(value: number, name: string) => [
-                        name === 'amount' ? formatCurrency(value) : value,
+                        name === 'amount' ? `$${(value / 1000000).toFixed(2)}M` : value.toLocaleString(),
                         name === 'amount' ? 'Amount' : 'Count'
                       ]}
+                      labelFormatter={(label) => {
+                        const bucket = STATIC_AGING.find(a => a.bucket === label);
+                        return bucket ? `${label} days (${bucket.count.toLocaleString()} write-offs)` : `${label} days`;
+                      }}
                     />
                     <Bar yAxisId="left" dataKey="amount" fill="#3b82f6" name="Amount" radius={[4, 4, 0, 0]} />
                     <Line yAxisId="right" type="monotone" dataKey="count" stroke="#ef4444" name="Count" strokeWidth={2} dot={{ r: 3 }} />
