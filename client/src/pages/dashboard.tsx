@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -140,6 +140,7 @@ export default function Dashboard() {
   const [detailView, setDetailView] = useState<'payor' | 'state' | 'rootCause' | null>(null);
   const [detailItem, setDetailItem] = useState<string | null>(null);
   const [sunburstSelectedType, setSunburstSelectedType] = useState<string | null>(null);
+  const [highlightedState, setHighlightedState] = useState<string | null>(null);
   
   const SCALE_FACTOR = 324;
   const WEEKLY_VARIANCES = 13696;
@@ -206,6 +207,13 @@ export default function Dashboard() {
     count: Math.round(s.count * SCALE_FACTOR),
     amount: Math.round(s.amount * SCALE_FACTOR),
   })).sort((a, b) => b.amount - a.amount), [rawStateData, SCALE_FACTOR]);
+  
+  // Clear highlighted state if it's no longer in the filtered data
+  useEffect(() => {
+    if (highlightedState && !stateData.some(s => s.state === highlightedState)) {
+      setHighlightedState(null);
+    }
+  }, [stateData, highlightedState]);
   
   const rawRootCauseData = useMemo(() => groupByRootCause(filteredData), [filteredData]);
   const rootCauseData = useMemo(() => rawRootCauseData.map(rc => ({
@@ -490,9 +498,9 @@ export default function Dashboard() {
                 Variance by State
               </CardTitle>
               <CardDescription>
-                Click a bar to filter • Click outside to clear
-                {selectedState !== "all" && (
-                  <Badge variant="secondary" className="ml-2">{selectedState}</Badge>
+                Click a bar to highlight • Click outside to clear
+                {highlightedState && (
+                  <Badge variant="secondary" className="ml-2">{highlightedState}</Badge>
                 )}
               </CardDescription>
             </CardHeader>
@@ -502,8 +510,8 @@ export default function Dashboard() {
                   style={{ height: `${stateData.length * 28}px`, minHeight: '400px' }}
                   onClick={(e) => {
                     const target = e.target as HTMLElement;
-                    if (!target.closest('.recharts-bar-rectangle') && selectedState !== "all") {
-                      setSelectedState("all");
+                    if (!target.closest('.recharts-bar-rectangle') && highlightedState) {
+                      setHighlightedState(null);
                     }
                   }}
                 >
@@ -535,18 +543,18 @@ export default function Dashboard() {
                         cursor="pointer"
                         onClick={(data, index, e) => {
                           e?.stopPropagation();
-                          if (selectedState === data.state) {
-                            setSelectedState("all");
+                          if (highlightedState === data.state) {
+                            setHighlightedState(null);
                           } else {
-                            setSelectedState(data.state);
+                            setHighlightedState(data.state);
                           }
                         }}
                       >
                         {stateData.map((entry, index) => (
                           <Cell 
                             key={`cell-${index}`} 
-                            fill={selectedState === entry.state ? '#0284c7' : '#3b82f6'}
-                            opacity={selectedState === "all" || selectedState === entry.state ? 1 : 0.25}
+                            fill={highlightedState === entry.state ? '#0284c7' : '#3b82f6'}
+                            opacity={!highlightedState || highlightedState === entry.state ? 1 : 0.25}
                           />
                         ))}
                       </Bar>
