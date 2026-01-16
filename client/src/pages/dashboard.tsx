@@ -54,6 +54,7 @@ import {
   generateVarianceData,
   calculateKPIs,
   groupByPayorType,
+  groupByPayorWithType,
   groupByState,
   groupByRootCause,
   groupByAgingBucket,
@@ -138,6 +139,7 @@ export default function Dashboard() {
   const [pageSize, setPageSize] = useState(25);
   const [detailView, setDetailView] = useState<'payor' | 'state' | 'rootCause' | null>(null);
   const [detailItem, setDetailItem] = useState<string | null>(null);
+  const [sunburstSelectedType, setSunburstSelectedType] = useState<string | null>(null);
   
   const SCALE_FACTOR = 324;
   const WEEKLY_VARIANCES = 13696;
@@ -175,6 +177,28 @@ export default function Dashboard() {
     count: Math.round(p.count * SCALE_FACTOR),
     amount: Math.round(p.amount * SCALE_FACTOR),
   })), [rawPayorTypeData, SCALE_FACTOR]);
+  
+  const rawSunburstData = useMemo(() => groupByPayorWithType(filteredData), [filteredData]);
+  const sunburstInnerData = useMemo(() => rawSunburstData.map((t, idx) => ({
+    name: t.type,
+    value: Math.round(t.amount * SCALE_FACTOR),
+    count: Math.round(t.count * SCALE_FACTOR),
+    fill: COLORS[idx % COLORS.length],
+  })), [rawSunburstData, SCALE_FACTOR]);
+  
+  const sunburstOuterData = useMemo(() => {
+    if (!sunburstSelectedType) return [];
+    const selectedTypeData = rawSunburstData.find(t => t.type === sunburstSelectedType);
+    if (!selectedTypeData) return [];
+    const typeIndex = rawSunburstData.findIndex(t => t.type === sunburstSelectedType);
+    const baseColor = COLORS[typeIndex % COLORS.length];
+    return selectedTypeData.payors.slice(0, 10).map((p, idx) => ({
+      name: p.name,
+      value: Math.round(p.amount * SCALE_FACTOR),
+      count: Math.round(p.count * SCALE_FACTOR),
+      fill: `hsl(${196 + idx * 15}, ${70 - idx * 3}%, ${40 + idx * 4}%)`,
+    }));
+  }, [rawSunburstData, sunburstSelectedType, SCALE_FACTOR]);
   
   const rawStateData = useMemo(() => groupByState(filteredData), [filteredData]);
   const stateData = useMemo(() => rawStateData.map(s => ({
@@ -593,6 +617,103 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Users className="h-5 w-5" />
+              Variance by Payor Type (Sunburst)
+            </CardTitle>
+            <CardDescription>
+              Click a segment to drill down into individual payors
+              {sunburstSelectedType && (
+                <Badge variant="secondary" className="ml-2">{sunburstSelectedType}</Badge>
+              )}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[400px] flex items-center justify-center">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={sunburstInnerData}
+                    dataKey="value"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={0}
+                    outerRadius={sunburstSelectedType ? 80 : 120}
+                    paddingAngle={1}
+                    onClick={(data) => {
+                      if (sunburstSelectedType === data.name) {
+                        setSunburstSelectedType(null);
+                      } else {
+                        setSunburstSelectedType(data.name);
+                      }
+                    }}
+                    cursor="pointer"
+                  >
+                    {sunburstInnerData.map((entry, index) => (
+                      <Cell 
+                        key={`inner-${index}`} 
+                        fill={entry.fill}
+                        opacity={sunburstSelectedType && sunburstSelectedType !== entry.name ? 0.3 : 1}
+                        stroke={sunburstSelectedType === entry.name ? '#000' : 'none'}
+                        strokeWidth={sunburstSelectedType === entry.name ? 2 : 0}
+                      />
+                    ))}
+                  </Pie>
+                  {sunburstSelectedType && sunburstOuterData.length > 0 && (
+                    <Pie
+                      data={sunburstOuterData}
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={90}
+                      outerRadius={160}
+                      paddingAngle={1}
+                      label={({ name, percent }) => `${name.length > 20 ? name.substring(0, 20) + '...' : name}`}
+                      labelLine={{ stroke: '#666', strokeWidth: 1 }}
+                    >
+                      {sunburstOuterData.map((entry, index) => (
+                        <Cell key={`outer-${index}`} fill={entry.fill} />
+                      ))}
+                    </Pie>
+                  )}
+                  <Tooltip 
+                    contentStyle={{ backgroundColor: 'hsl(var(--card))', borderRadius: '8px', border: '1px solid hsl(var(--border))' }}
+                    formatter={(value: number, name: string, props: any) => [
+                      `${formatCurrency(value)} (${props.payload.count.toLocaleString()} variances)`,
+                      name
+                    ]}
+                  />
+                  {!sunburstSelectedType && (
+                    <Legend 
+                      layout="vertical" 
+                      align="right" 
+                      verticalAlign="middle"
+                      wrapperStyle={{ fontSize: '11px' }}
+                    />
+                  )}
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+            {sunburstSelectedType && (
+              <div className="mt-4 text-center">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => setSunburstSelectedType(null)}
+                  data-testid="button-sunburst-reset"
+                >
+                  <X className="h-4 w-4 mr-1" />
+                  Clear Selection
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         <div className="grid gap-4 md:grid-cols-2">
           <Card>

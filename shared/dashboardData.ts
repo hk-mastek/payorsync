@@ -335,6 +335,34 @@ export function groupByPayorType(data: VarianceRecord[]) {
     .sort((a, b) => b.amount - a.amount);
 }
 
+export function groupByPayorWithType(data: VarianceRecord[]) {
+  const typeGroups: Record<string, { count: number; amount: number; payors: Record<string, { name: string; count: number; amount: number }> }> = {};
+  data.forEach(v => {
+    if (!typeGroups[v.payorType]) {
+      typeGroups[v.payorType] = { count: 0, amount: 0, payors: {} };
+    }
+    typeGroups[v.payorType].count++;
+    typeGroups[v.payorType].amount += v.varianceAmount;
+    
+    if (!typeGroups[v.payorType].payors[v.payorId]) {
+      typeGroups[v.payorType].payors[v.payorId] = { name: v.payorName, count: 0, amount: 0 };
+    }
+    typeGroups[v.payorType].payors[v.payorId].count++;
+    typeGroups[v.payorType].payors[v.payorId].amount += v.varianceAmount;
+  });
+  
+  return Object.entries(typeGroups)
+    .map(([type, data]) => ({
+      type,
+      count: data.count,
+      amount: data.amount,
+      payors: Object.entries(data.payors)
+        .map(([id, payor]) => ({ id, ...payor }))
+        .sort((a, b) => b.amount - a.amount),
+    }))
+    .sort((a, b) => b.amount - a.amount);
+}
+
 export function groupByState(data: VarianceRecord[]) {
   const groups: Record<string, { count: number; amount: number; stateName: string }> = {};
   data.forEach(v => {
