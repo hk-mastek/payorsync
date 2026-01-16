@@ -29,78 +29,80 @@ import {
 } from "recharts";
 
 const COLORS = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#84cc16'];
-const FUNNEL_COLORS = ['#3b82f6', '#60a5fa', '#93c5fd', '#22c55e', '#ef4444'];
+const FUNNEL_COLORS = ['#3b82f6', '#60a5fa', '#93c5fd', '#ef4444'];
 
 const STATIC_KPI = {
-  totalWriteOffAmount: 599400000,
-  writeOffCount: 101088,
-  writeOffRate: 13.9,
-  avgDaysToWriteOff: 127,
-  potentialRecovery: 137700000,
-  recoverableCount: 28836,
+  totalWriteOffAmount: 7820000,
+  writeOffCount: 850,
+  writeOffRate: 2.8,
+  avgDaysToWriteOff: 198,
+  potentialRecovery: 2740000,
+  recoverableCount: 298,
+  avgWriteOffAmount: 9200,
+  medianWriteOffAmount: 1850,
+  recoveryRate: 42,
 };
 
 const STATIC_FUNNEL = [
-  { stage: 'Total Variances', count: 729000, amount: 5994000000 },
-  { stage: 'Under Review', count: 283500, amount: 2332800000 },
-  { stage: 'Appealed', count: 137700, amount: 1134000000 },
-  { stage: 'Written Off', count: 101088, amount: 599400000 },
+  { stage: 'Total Variances', count: 30357, amount: 279000000 },
+  { stage: 'Under Review', count: 12143, amount: 111600000 },
+  { stage: 'Appealed', count: 5893, amount: 54180000 },
+  { stage: 'Written Off', count: 850, amount: 7820000 },
 ];
 
 const STATIC_PREDICTIVE = {
-  atRiskCount: 50544,
-  atRiskAmount: 414720000,
-  projectedWriteOffs: 20088,
-  projectedAmount: 165888000,
-  timelyFilingRisk: 13932,
+  atRiskCount: 298,
+  atRiskAmount: 2740000,
+  projectedWriteOffs: 119,
+  projectedAmount: 1096000,
+  timelyFilingRisk: 272,
 };
 
 const STATIC_ROOT_CAUSE = [
-  { category: 'Rate Discrepancy', count: 25272, amount: 157140000 },
-  { category: 'Coding Error', count: 21060, amount: 122472000 },
-  { category: 'Auth Denial', count: 16848, amount: 101088000 },
-  { category: 'Timely Filing', count: 15552, amount: 95580000 },
-  { category: 'Medical Necessity', count: 11340, amount: 64152000 },
-  { category: 'Coverage Terminated', count: 11016, amount: 58968000 },
+  { category: 'Timely Filing Exceeded', count: 272, amount: 2500000 },
+  { category: 'Appeal Exhausted', count: 204, amount: 1880000 },
+  { category: 'Patient Responsibility', count: 153, amount: 1410000 },
+  { category: 'Documentation Deficiency', count: 102, amount: 940000 },
+  { category: 'Contractual/Regulatory', count: 68, amount: 626000 },
+  { category: 'Small Balance Write-Off', count: 34, amount: 313000 },
+  { category: 'Other', count: 17, amount: 156000 },
 ];
 
 const STATIC_AGING = [
-  { bucket: '0-30', count: 3888, amount: 14580000 },
-  { bucket: '31-60', count: 9072, amount: 40500000 },
-  { bucket: '61-90', count: 14580, amount: 69660000 },
-  { bucket: '91-120', count: 22032, amount: 124740000 },
-  { bucket: '121-180', count: 28836, amount: 168480000 },
-  { bucket: '181-365', count: 16848, amount: 124740000 },
-  { bucket: '365+', count: 5832, amount: 56700000 },
+  { bucket: '0-90', count: 51, amount: 469000 },
+  { bucket: '91-180', count: 153, amount: 1408000 },
+  { bucket: '181-270', count: 238, amount: 2190000 },
+  { bucket: '271-365', count: 272, amount: 2503000 },
+  { bucket: '366-450', count: 102, amount: 938000 },
+  { bucket: '451+', count: 34, amount: 313000 },
 ];
 
 const STATIC_REASONS = [
-  { reason: 'Timely Filing Expired', count: 25272, amount: 149688000 },
-  { reason: 'Appeal Exhausted', count: 22356, amount: 131868000 },
-  { reason: 'Contractual Adjustment', count: 18144, amount: 107892000 },
-  { reason: 'Patient Responsibility', count: 11988, amount: 71928000 },
-  { reason: 'Coordination of Benefits', count: 10044, amount: 59940000 },
-  { reason: 'Provider Error', count: 8100, amount: 47952000 },
-  { reason: 'Payer Insolvency', count: 3240, amount: 18144000 },
-  { reason: 'Small Balance', count: 1944, amount: 11988000 },
+  { reason: 'Timely Filing Exceeded', count: 272, amount: 2500000 },
+  { reason: 'Appeal Exhausted', count: 204, amount: 1880000 },
+  { reason: 'Patient Responsibility Uncollectible', count: 153, amount: 1410000 },
+  { reason: 'Documentation Deficiency', count: 102, amount: 940000 },
+  { reason: 'Contractual/Regulatory', count: 68, amount: 626000 },
+  { reason: 'Small Balance Write-Off', count: 34, amount: 313000 },
+  { reason: 'Other', count: 17, amount: 156000 },
 ];
 
 const STATIC_PAYORS = [
-  { payorName: 'Aetna', count: 15552, amount: 92340000, avgDays: 132 },
-  { payorName: 'UnitedHealth', count: 13608, amount: 80352000, avgDays: 118 },
-  { payorName: 'Cigna', count: 12312, amount: 72900000, avgDays: 142 },
-  { payorName: 'Humana', count: 11340, amount: 64152000, avgDays: 125 },
-  { payorName: 'Blue Cross', count: 10368, amount: 60912000, avgDays: 135 },
-  { payorName: 'Medicare', count: 9072, amount: 53460000, avgDays: 108 },
-  { payorName: 'Anthem', count: 8100, amount: 47952000, avgDays: 145 },
-  { payorName: 'Kaiser', count: 7128, amount: 42768000, avgDays: 122 },
-  { payorName: 'Molina', count: 5832, amount: 34992000, avgDays: 138 },
-  { payorName: 'Centene', count: 4536, amount: 27540000, avgDays: 128 },
+  { payorName: 'Medicare Traditional', count: 255, amount: 2190000, rate: 2.1 },
+  { payorName: 'Medicare Advantage', count: 230, amount: 2350000, rate: 3.4 },
+  { payorName: 'Commercial', count: 170, amount: 1800000, rate: 3.8 },
+  { payorName: 'Medicaid', count: 153, amount: 1170000, rate: 2.4 },
+  { payorName: 'Other Government', count: 42, amount: 312000, rate: 2.6 },
 ];
 
-export default function WriteOffs() {
+const STATIC_PREVENTABLE = [
+  { status: 'Preventable', count: 298, amount: 2740000 },
+  { status: 'Non-Preventable', count: 552, amount: 5080000 },
+];
+
+export default function WriteOffs2() {
   const formatCurrency = (value: number) => {
-    if (value >= 1000000) return `$${Math.round(value / 1000000)}M`;
+    if (value >= 1000000) return `$${(value / 1000000).toFixed(1)}M`;
     if (value >= 1000) return `$${Math.round(value / 1000)}K`;
     return `$${Math.round(value)}`;
   };
@@ -109,20 +111,20 @@ export default function WriteOffs() {
     <DashboardLayout>
       <div className="space-y-6 p-6">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight" data-testid="text-page-title">Write-Off Analysis</h1>
+          <h1 className="text-3xl font-bold tracking-tight" data-testid="text-page-title">Write-Off Analysis 2</h1>
           <p className="text-muted-foreground mt-1">Track write-off trends, recovery potential, and root cause analysis</p>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-4">
           <Card className="border-l-4 border-l-red-500">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">Total Write-Offs</CardTitle>
               <DollarSign className="h-4 w-4 text-red-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold" data-testid="text-total-writeoff-amount">${Math.round(STATIC_KPI.totalWriteOffAmount / 1000000 * 10) / 10}M</div>
+              <div className="text-2xl font-bold" data-testid="text-total-writeoff-amount">{formatCurrency(STATIC_KPI.totalWriteOffAmount)}</div>
               <p className="text-xs text-muted-foreground mt-1">
-                {STATIC_KPI.writeOffCount} write-offs ({STATIC_KPI.writeOffRate}% of variances)
+                {STATIC_KPI.writeOffCount} records ({STATIC_KPI.writeOffRate}% rate)
               </p>
             </CardContent>
           </Card>
@@ -135,20 +137,33 @@ export default function WriteOffs() {
             <CardContent>
               <div className="text-2xl font-bold" data-testid="text-avg-days">{STATIC_KPI.avgDaysToWriteOff} days</div>
               <p className="text-xs text-muted-foreground mt-1">
-                From variance identification to write-off
+                Median: ${STATIC_KPI.medianWriteOffAmount.toLocaleString()}
               </p>
             </CardContent>
           </Card>
 
           <Card className="border-l-4 border-l-emerald-500">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Recovery Potential</CardTitle>
+              <CardTitle className="text-sm font-medium">Recovery Rate</CardTitle>
               <RefreshCw className="h-4 w-4 text-emerald-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold" data-testid="text-recovery-potential">${Math.round(STATIC_KPI.potentialRecovery / 1000)}K</div>
+              <div className="text-2xl font-bold" data-testid="text-recovery-rate">{STATIC_KPI.recoveryRate}%</div>
               <p className="text-xs text-muted-foreground mt-1">
-                {STATIC_KPI.recoverableCount} write-offs with recovery potential
+                On appealed claims
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-l-4 border-l-blue-500">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium">Avg Write-Off Amount</CardTitle>
+              <DollarSign className="h-4 w-4 text-blue-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold" data-testid="text-avg-amount">${STATIC_KPI.avgWriteOffAmount.toLocaleString()}</div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Per write-off record
               </p>
             </CardContent>
           </Card>
@@ -400,7 +415,7 @@ export default function WriteOffs() {
                       formatter={(value: number) => [formatCurrency(value), 'Amount']}
                       labelFormatter={(label) => {
                         const payor = STATIC_PAYORS.find(p => p.payorName === label);
-                        return payor ? `${label} (${payor.count} write-offs, avg ${payor.avgDays} days)` : label;
+                        return payor ? `${label} (${payor.count} records, ${payor.rate}% rate)` : label;
                       }}
                     />
                     <Bar dataKey="amount" fill="#8b5cf6" radius={[0, 4, 4, 0]} />
@@ -411,7 +426,63 @@ export default function WriteOffs() {
           </Card>
         </div>
 
-        <Card>
+        <div className="grid gap-6 lg:grid-cols-3">
+          <Card className="lg:col-span-1">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Preventable vs Non-Preventable</CardTitle>
+              <CardDescription className="text-xs">Classification of write-off preventability</CardDescription>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="h-[200px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
+                    <Pie
+                      data={STATIC_PREVENTABLE}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={40}
+                      outerRadius={70}
+                      fill="#8884d8"
+                      paddingAngle={2}
+                      dataKey="amount"
+                      nameKey="status"
+                    >
+                      <Cell fill="#ef4444" />
+                      <Cell fill="#22c55e" />
+                    </Pie>
+                    <Tooltip 
+                      contentStyle={{ backgroundColor: 'hsl(var(--card))', borderRadius: '8px', border: '1px solid hsl(var(--border))', fontSize: '12px' }}
+                      formatter={(value: number, name: string) => [formatCurrency(value), name]}
+                    />
+                    <Legend 
+                      layout="horizontal" 
+                      align="center" 
+                      verticalAlign="bottom" 
+                      wrapperStyle={{ fontSize: '10px' }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="space-y-2 mt-2">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-red-500"></span>
+                    Preventable
+                  </span>
+                  <span className="font-medium">{STATIC_PREVENTABLE[0].count} ({Math.round(STATIC_PREVENTABLE[0].count / STATIC_KPI.writeOffCount * 100)}%)</span>
+                </div>
+                <div className="flex justify-between items-center text-xs">
+                  <span className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                    Non-Preventable
+                  </span>
+                  <span className="font-medium">{STATIC_PREVENTABLE[1].count} ({Math.round(STATIC_PREVENTABLE[1].count / STATIC_KPI.writeOffCount * 100)}%)</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="lg:col-span-2">
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Write-Off Summary</CardTitle>
             <CardDescription className="text-xs">Detailed breakdown of write-off reasons with recovery analysis</CardDescription>
@@ -465,7 +536,8 @@ export default function WriteOffs() {
               </table>
             </div>
           </CardContent>
-        </Card>
+          </Card>
+        </div>
       </div>
     </DashboardLayout>
   );
