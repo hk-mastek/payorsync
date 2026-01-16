@@ -121,13 +121,12 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   };
 
   const navigation = [
-    { name: 'Dashboard', href: '/', icon: LayoutDashboard },
+    { name: 'Variance Dashboard', href: '/', icon: LayoutDashboard },
     { name: 'Contracts', href: '/contracts', icon: FileText },
     { name: 'Drafting', href: '/drafter', icon: PenTool },
     { name: 'Library', href: '/clause-library', icon: BookOpen },
     { name: 'Variances', href: '/variances', icon: AlertTriangle },
     { name: 'Write-Offs', href: '/write-offs', icon: TrendingDown },
-    { name: 'Analytics', href: '/analytics', icon: BarChart3 },
     { name: 'Governance', href: '/governance', icon: ShieldCheck },
     { name: 'Settings', href: '/settings', icon: Settings },
   ];
