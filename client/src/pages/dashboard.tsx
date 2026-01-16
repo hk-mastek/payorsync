@@ -482,69 +482,7 @@ export default function Dashboard() {
           </div>
         </Card>
 
-        <div className="grid gap-4 md:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Users className="h-5 w-5" />
-                Root Cause Analysis
-              </CardTitle>
-              <CardDescription>
-                Click a bar to filter • Click outside to clear
-                {selectedPayorType !== "all" && (
-                  <Badge variant="secondary" className="ml-2">{selectedPayorType}</Badge>
-                )}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div 
-                className="h-[300px]"
-                onClick={(e) => {
-                  const target = e.target as HTMLElement;
-                  if (!target.closest('.recharts-bar-rectangle') && selectedPayorType !== "all") {
-                    setSelectedPayorType("all");
-                  }
-                }}
-              >
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={payorTypeData} layout="vertical" margin={{ top: 0, right: 30, left: 120, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="hsl(var(--border))" />
-                    <XAxis type="number" tickFormatter={(v) => formatCurrency(v)} stroke="hsl(var(--muted-foreground))" fontSize={11} />
-                    <YAxis type="category" dataKey="type" stroke="hsl(var(--muted-foreground))" fontSize={11} width={110} />
-                    <Tooltip 
-                      cursor={{ fill: 'hsl(var(--muted)/0.3)' }}
-                      contentStyle={{ backgroundColor: 'hsl(var(--card))', borderRadius: '8px', border: '1px solid hsl(var(--border))' }}
-                      formatter={(value: number) => [formatCurrency(value), 'Variance']}
-                    />
-                    <Bar 
-                      dataKey="amount" 
-                      radius={[0, 4, 4, 0]} 
-                      barSize={20}
-                      onClick={(data, index, e) => {
-                        e?.stopPropagation();
-                        if (selectedPayorType === data.type) {
-                          setSelectedPayorType("all");
-                        } else {
-                          setSelectedPayorType(data.type);
-                        }
-                      }}
-                      cursor="pointer"
-                    >
-                      {payorTypeData.map((entry, index) => (
-                        <Cell 
-                          key={`cell-${index}`} 
-                          fill={selectedPayorType === entry.type ? 'hsl(196, 100%, 30%)' : COLORS[index % COLORS.length]} 
-                          stroke={selectedPayorType === entry.type ? 'hsl(196, 100%, 20%)' : 'none'}
-                          strokeWidth={selectedPayorType === entry.type ? 2 : 0}
-                        />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
-
+        <div className="grid gap-4 md:grid-cols-1">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
