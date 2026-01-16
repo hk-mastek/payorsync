@@ -12,7 +12,8 @@ import {
   ShieldCheck,
   Menu,
   PenTool,
-  BookOpen
+  BookOpen,
+  TrendingDown
 } from "lucide-react";
 import avatarImage from "@assets/stock_images/professional_headsho_e15b535e.jpg";
 import { Button } from "@/components/ui/button";
@@ -125,6 +126,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     { name: 'Drafting', href: '/drafter', icon: PenTool },
     { name: 'Library', href: '/clause-library', icon: BookOpen },
     { name: 'Variances', href: '/variances', icon: AlertTriangle },
+    { name: 'Write-Offs', href: '/write-offs', icon: TrendingDown },
     { name: 'Analytics', href: '/analytics', icon: BarChart3 },
     { name: 'Governance', href: '/governance', icon: ShieldCheck },
     { name: 'Settings', href: '/settings', icon: Settings },
@@ -145,18 +147,18 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           {navigation.map((item) => {
             const isActive = location === item.href;
             return (
-              <Link key={item.name} href={item.href}>
-                <a
-                  className={cn(
-                    "group flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors",
-                    isActive
-                      ? "bg-sidebar-accent text-white"
-                      : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-white"
-                  )}
-                >
-                  <item.icon className={cn("h-5 w-5", isActive ? "text-sidebar-primary-foreground" : "text-sidebar-foreground/50")} />
-                  {item.name}
-                </a>
+              <Link 
+                key={item.name} 
+                href={item.href}
+                className={cn(
+                  "group flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors",
+                  isActive
+                    ? "bg-sidebar-accent text-white"
+                    : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-white"
+                )}
+              >
+                <item.icon className={cn("h-5 w-5", isActive ? "text-sidebar-primary-foreground" : "text-sidebar-foreground/50")} />
+                {item.name}
               </Link>
             );
           })}

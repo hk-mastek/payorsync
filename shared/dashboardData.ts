@@ -414,3 +414,194 @@ export function getTrendData(data: VarianceRecord[]) {
     net: months[month].new - months[month].resolved,
   }));
 }
+
+export interface WriteOffRecord {
+  id: string;
+  varianceId: string;
+  payorId: string;
+  payorName: string;
+  payorType: string;
+  patientName: string;
+  state: string;
+  stateName: string;
+  rootCauseCategory: string;
+  rootCauseSubcategory: string;
+  originalAmount: number;
+  writeOffAmount: number;
+  writeOffDate: string;
+  writeOffReason: string;
+  agingAtWriteOff: number;
+  agingBucket: string;
+  appealAttempts: number;
+  recoveryPotential: 'High' | 'Medium' | 'Low' | 'None';
+}
+
+export const WRITEOFF_REASONS = [
+  { reason: 'Timely Filing Expired', weight: 25 },
+  { reason: 'Appeal Exhausted', weight: 22 },
+  { reason: 'Contractual Adjustment', weight: 18 },
+  { reason: 'Patient Responsibility', weight: 12 },
+  { reason: 'Coordination of Benefits', weight: 10 },
+  { reason: 'Provider Error - Uncorrectable', weight: 8 },
+  { reason: 'Payer Insolvency', weight: 3 },
+  { reason: 'Small Balance Write-Off', weight: 2 },
+];
+
+export function generateWriteOffData(varianceData: VarianceRecord[]): WriteOffRecord[] {
+  const writtenOffVariances = varianceData.filter(v => v.status === 'Written Off');
+  const writeOffs: WriteOffRecord[] = [];
+  
+  writtenOffVariances.forEach((v, i) => {
+    const seed = i + 1000;
+    const reason = weightedRandomSelect(WRITEOFF_REASONS, seed);
+    
+    const appealAttempts = Math.floor(seededRandom(seed * 2) * 4);
+    let recoveryPotential: 'High' | 'Medium' | 'Low' | 'None' = 'None';
+    if (reason.reason === 'Appeal Exhausted' && appealAttempts < 2) recoveryPotential = 'Low';
+    if (reason.reason === 'Contractual Adjustment') recoveryPotential = 'Medium';
+    if (reason.reason === 'Small Balance Write-Off') recoveryPotential = 'None';
+    
+    const writeOffDate = new Date(v.varianceIdentifiedDate);
+    writeOffDate.setDate(writeOffDate.getDate() + v.agingDays + Math.floor(seededRandom(seed * 3) * 30));
+    
+    writeOffs.push({
+      id: `WO-${String(50001 + i).padStart(5, '0')}`,
+      varianceId: v.id,
+      payorId: v.payorId,
+      payorName: v.payorName,
+      payorType: v.payorType,
+      patientName: v.patientName,
+      state: v.state,
+      stateName: v.stateName,
+      rootCauseCategory: v.rootCauseCategory,
+      rootCauseSubcategory: v.rootCauseSubcategory,
+      originalAmount: v.varianceAmount,
+      writeOffAmount: v.varianceAmount,
+      writeOffDate: writeOffDate.toISOString().split('T')[0],
+      writeOffReason: reason.reason,
+      agingAtWriteOff: v.agingDays + Math.floor(seededRandom(seed * 3) * 30),
+      agingBucket: v.agingBucket,
+      appealAttempts,
+      recoveryPotential,
+    });
+  });
+  
+  return writeOffs;
+}
+
+export function calculateWriteOffKPIs(writeOffs: WriteOffRecord[], totalVariances: number, totalVarianceAmount: number) {
+  const totalWriteOffAmount = writeOffs.reduce((sum, w) => sum + w.writeOffAmount, 0);
+  const writeOffRate = totalVariances > 0 ? (writeOffs.length / totalVariances) * 100 : 0;
+  const avgDaysToWriteOff = writeOffs.length > 0 
+    ? writeOffs.reduce((sum, w) => sum + w.agingAtWriteOff, 0) / writeOffs.length 
+    : 0;
+  
+  const recoverableWriteOffs = writeOffs.filter(w => w.recoveryPotential !== 'None');
+  const potentialRecovery = recoverableWriteOffs.reduce((sum, w) => {
+    const factor = w.recoveryPotential === 'High' ? 0.7 : w.recoveryPotential === 'Medium' ? 0.4 : 0.15;
+    return sum + (w.writeOffAmount * factor);
+  }, 0);
+  
+  return {
+    totalWriteOffAmount,
+    writeOffCount: writeOffs.length,
+    writeOffRate: Math.round(writeOffRate * 10) / 10,
+    avgDaysToWriteOff: Math.round(avgDaysToWriteOff),
+    potentialRecovery: Math.round(potentialRecovery),
+    recoverableCount: recoverableWriteOffs.length,
+  };
+}
+
+export function getWriteOffFunnelData(varianceData: VarianceRecord[]) {
+  const total = varianceData.length;
+  const underReview = varianceData.filter(v => v.status === 'Open' || v.status === 'In Progress').length;
+  const appealed = varianceData.filter(v => v.status === 'Under Appeal').length;
+  const resolved = varianceData.filter(v => v.status === 'Resolved').length;
+  const writtenOff = varianceData.filter(v => v.status === 'Written Off').length;
+  
+  return [
+    { stage: 'Total Variances', count: total, amount: varianceData.reduce((s, v) => s + v.varianceAmount, 0) },
+    { stage: 'Under Review', count: underReview, amount: varianceData.filter(v => v.status === 'Open' || v.status === 'In Progress').reduce((s, v) => s + v.varianceAmount, 0) },
+    { stage: 'Appealed', count: appealed, amount: varianceData.filter(v => v.status === 'Under Appeal').reduce((s, v) => s + v.varianceAmount, 0) },
+    { stage: 'Resolved', count: resolved, amount: varianceData.filter(v => v.status === 'Resolved').reduce((s, v) => s + v.varianceAmount, 0) },
+    { stage: 'Written Off', count: writtenOff, amount: varianceData.filter(v => v.status === 'Written Off').reduce((s, v) => s + v.varianceAmount, 0) },
+  ];
+}
+
+export function getWriteOffByRootCause(writeOffs: WriteOffRecord[]) {
+  const groups: Record<string, { count: number; amount: number; reasons: Record<string, number> }> = {};
+  
+  writeOffs.forEach(w => {
+    if (!groups[w.rootCauseCategory]) {
+      groups[w.rootCauseCategory] = { count: 0, amount: 0, reasons: {} };
+    }
+    groups[w.rootCauseCategory].count++;
+    groups[w.rootCauseCategory].amount += w.writeOffAmount;
+    
+    if (!groups[w.rootCauseCategory].reasons[w.writeOffReason]) {
+      groups[w.rootCauseCategory].reasons[w.writeOffReason] = 0;
+    }
+    groups[w.rootCauseCategory].reasons[w.writeOffReason]++;
+  });
+  
+  return Object.entries(groups)
+    .map(([category, data]) => ({
+      category,
+      ...data,
+      topReason: Object.entries(data.reasons).sort((a, b) => b[1] - a[1])[0]?.[0] || 'N/A',
+    }))
+    .sort((a, b) => b.amount - a.amount);
+}
+
+export function getWriteOffAgingAnalysis(writeOffs: WriteOffRecord[]) {
+  const buckets = ['0-30 days', '31-60 days', '61-90 days', '91-120 days', '121-180 days', '181-365 days', '365+ days'];
+  const groups: Record<string, { count: number; amount: number }> = {};
+  buckets.forEach(b => groups[b] = { count: 0, amount: 0 });
+  
+  writeOffs.forEach(w => {
+    if (groups[w.agingBucket]) {
+      groups[w.agingBucket].count++;
+      groups[w.agingBucket].amount += w.writeOffAmount;
+    }
+  });
+  
+  return buckets.map(bucket => ({ bucket, ...groups[bucket] }));
+}
+
+export function getWriteOffByPayor(writeOffs: WriteOffRecord[]) {
+  const groups: Record<string, { payorName: string; payorType: string; count: number; amount: number; avgDays: number; totalDays: number }> = {};
+  
+  writeOffs.forEach(w => {
+    if (!groups[w.payorId]) {
+      groups[w.payorId] = { payorName: w.payorName, payorType: w.payorType, count: 0, amount: 0, avgDays: 0, totalDays: 0 };
+    }
+    groups[w.payorId].count++;
+    groups[w.payorId].amount += w.writeOffAmount;
+    groups[w.payorId].totalDays += w.agingAtWriteOff;
+  });
+  
+  return Object.entries(groups)
+    .map(([id, data]) => ({
+      payorId: id,
+      ...data,
+      avgDays: Math.round(data.totalDays / data.count),
+    }))
+    .sort((a, b) => b.amount - a.amount)
+    .slice(0, 15);
+}
+
+export function getWriteOffByReason(writeOffs: WriteOffRecord[]) {
+  const groups: Record<string, { count: number; amount: number }> = {};
+  
+  writeOffs.forEach(w => {
+    if (!groups[w.writeOffReason]) {
+      groups[w.writeOffReason] = { count: 0, amount: 0 };
+    }
+    groups[w.writeOffReason].count++;
+    groups[w.writeOffReason].amount += w.writeOffAmount;
+  });
+  
+  return Object.entries(groups)
+    .map(([reason, data]) => ({ reason, ...data }))
+    .sort((a, b) => b.amount - a.amount);
+}
