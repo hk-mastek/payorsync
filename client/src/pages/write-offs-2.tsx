@@ -1,13 +1,16 @@
+import { useState } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   DollarSign,
   TrendingDown,
   Clock,
   RefreshCw,
   AlertTriangle,
-  Target
+  Target,
+  X
 } from "lucide-react";
 import {
   BarChart,
@@ -95,17 +98,86 @@ const STATIC_PAYORS = [
   { payorName: 'Other Government', count: 42, amount: 312000, rate: 2.6 },
 ];
 
+const STATIC_PAYOR_HIERARCHY = [
+  { 
+    type: 'Medicare Traditional', count: 255, amount: 2190000, rate: 2.1,
+    payors: [
+      { name: 'Noridian', count: 68, amount: 584000 },
+      { name: 'CGS', count: 55, amount: 473000 },
+      { name: 'Palmetto', count: 52, amount: 447000 },
+      { name: 'NGS', count: 45, amount: 387000 },
+      { name: 'WPS', count: 35, amount: 299000 },
+    ]
+  },
+  { 
+    type: 'Medicare Advantage', count: 230, amount: 2350000, rate: 3.4,
+    payors: [
+      { name: 'UnitedHealthcare MA', count: 58, amount: 592000 },
+      { name: 'Humana MA', count: 52, amount: 531000 },
+      { name: 'Aetna MA', count: 45, amount: 459000 },
+      { name: 'Cigna MA', count: 40, amount: 408000 },
+      { name: 'Anthem MA', count: 35, amount: 360000 },
+    ]
+  },
+  { 
+    type: 'Commercial', count: 170, amount: 1800000, rate: 3.8,
+    payors: [
+      { name: 'BCBS', count: 48, amount: 508000 },
+      { name: 'UnitedHealthcare', count: 38, amount: 402000 },
+      { name: 'Cigna', count: 32, amount: 339000 },
+      { name: 'Aetna', count: 28, amount: 296000 },
+      { name: 'Other Commercial', count: 24, amount: 255000 },
+    ]
+  },
+  { 
+    type: 'Medicaid', count: 153, amount: 1170000, rate: 2.4,
+    payors: [
+      { name: 'CA Medi-Cal', count: 42, amount: 321000 },
+      { name: 'TX Medicaid', count: 35, amount: 268000 },
+      { name: 'FL Medicaid', count: 30, amount: 230000 },
+      { name: 'NY Medicaid', count: 26, amount: 199000 },
+      { name: 'Other State', count: 20, amount: 152000 },
+    ]
+  },
+  { 
+    type: 'Other Government', count: 42, amount: 312000, rate: 2.6,
+    payors: [
+      { name: 'VA Healthcare', count: 18, amount: 134000 },
+      { name: 'TRICARE East', count: 14, amount: 104000 },
+      { name: 'TRICARE West', count: 10, amount: 74000 },
+    ]
+  },
+];
+
 const STATIC_PREVENTABLE = [
   { status: 'Preventable', count: 298, amount: 2740000 },
   { status: 'Non-Preventable', count: 552, amount: 5080000 },
 ];
 
 export default function WriteOffs2() {
+  const [selectedPayorType, setSelectedPayorType] = useState<string | null>(null);
+  
   const formatCurrency = (value: number) => {
     if (value >= 1000000) return `$${(value / 1000000).toFixed(1)}M`;
     if (value >= 1000) return `$${Math.round(value / 1000)}K`;
     return `$${Math.round(value)}`;
   };
+  
+  const sunburstInnerData = STATIC_PAYOR_HIERARCHY.map((t, idx) => ({
+    name: t.type,
+    value: t.amount,
+    count: t.count,
+    fill: COLORS[idx % COLORS.length],
+  }));
+  
+  const sunburstOuterData = selectedPayorType 
+    ? STATIC_PAYOR_HIERARCHY.find(t => t.type === selectedPayorType)?.payors.map((p, idx) => ({
+        name: p.name,
+        value: p.amount,
+        count: p.count,
+        fill: `hsl(${200 + idx * 20}, ${65 - idx * 5}%, ${45 + idx * 5}%)`,
+      })) || []
+    : [];
 
   return (
     <DashboardLayout>
@@ -394,37 +466,95 @@ export default function WriteOffs2() {
 
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">Top Payors by Write-Off</CardTitle>
-              <CardDescription className="text-xs">Payors with highest write-off amounts</CardDescription>
+              <CardTitle className="text-base">Write-Offs by Payor Type</CardTitle>
+              <CardDescription className="text-xs">
+                Click a segment to see individual payors
+                {selectedPayorType && (
+                  <Badge variant="secondary" className="ml-2">{selectedPayorType}</Badge>
+                )}
+              </CardDescription>
             </CardHeader>
             <CardContent className="pt-0">
               <div className="h-[280px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={STATIC_PAYORS} layout="vertical" margin={{ left: 5, right: 10, top: 5, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
-                    <XAxis 
-                      type="number" 
-                      tickFormatter={formatCurrency}
-                      tick={{ fontSize: 10 }}
-                    />
-                    <YAxis 
-                      type="category" 
-                      dataKey="payorName" 
-                      tick={{ fontSize: 10 }}
-                      width={70}
-                    />
+                  <PieChart>
+                    <Pie
+                      data={sunburstInnerData}
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={0}
+                      outerRadius={selectedPayorType ? 60 : 90}
+                      paddingAngle={1}
+                      onClick={(data) => {
+                        if (selectedPayorType === data.name) {
+                          setSelectedPayorType(null);
+                        } else {
+                          setSelectedPayorType(data.name);
+                        }
+                      }}
+                      cursor="pointer"
+                    >
+                      {sunburstInnerData.map((entry, index) => (
+                        <Cell 
+                          key={`inner-${index}`} 
+                          fill={entry.fill}
+                          opacity={selectedPayorType && selectedPayorType !== entry.name ? 0.3 : 1}
+                          stroke={selectedPayorType === entry.name ? '#000' : 'none'}
+                          strokeWidth={selectedPayorType === entry.name ? 2 : 0}
+                        />
+                      ))}
+                    </Pie>
+                    {selectedPayorType && sunburstOuterData.length > 0 && (
+                      <Pie
+                        data={sunburstOuterData}
+                        dataKey="value"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={70}
+                        outerRadius={110}
+                        paddingAngle={1}
+                        label={({ name }) => name.length > 12 ? name.substring(0, 12) + '...' : name}
+                        labelLine={{ stroke: '#666', strokeWidth: 1 }}
+                      >
+                        {sunburstOuterData.map((entry, index) => (
+                          <Cell key={`outer-${index}`} fill={entry.fill} />
+                        ))}
+                      </Pie>
+                    )}
                     <Tooltip 
                       contentStyle={{ backgroundColor: 'hsl(var(--card))', borderRadius: '8px', border: '1px solid hsl(var(--border))', fontSize: '12px' }}
-                      formatter={(value: number) => [formatCurrency(value), 'Amount']}
-                      labelFormatter={(label) => {
-                        const payor = STATIC_PAYORS.find(p => p.payorName === label);
-                        return payor ? `${label} (${payor.count} records, ${payor.rate}% rate)` : label;
-                      }}
+                      formatter={(value: number, name: string, props: any) => [
+                        `${formatCurrency(value)} (${props.payload.count} records)`,
+                        name
+                      ]}
                     />
-                    <Bar dataKey="amount" fill="#8b5cf6" radius={[0, 4, 4, 0]} />
-                  </BarChart>
+                    {!selectedPayorType && (
+                      <Legend 
+                        layout="vertical" 
+                        align="right" 
+                        verticalAlign="middle"
+                        wrapperStyle={{ fontSize: '10px' }}
+                      />
+                    )}
+                  </PieChart>
                 </ResponsiveContainer>
               </div>
+              {selectedPayorType && (
+                <div className="mt-2 text-center">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => setSelectedPayorType(null)}
+                    data-testid="button-payor-sunburst-reset"
+                  >
+                    <X className="h-3 w-3 mr-1" />
+                    Clear Selection
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
