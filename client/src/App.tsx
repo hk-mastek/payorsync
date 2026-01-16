@@ -12,6 +12,7 @@ import Settings from "@/pages/settings";
 import ClauseLibrary from "@/pages/clause-library";
 import ContractDrafter from "@/pages/contract-drafter";
 import WriteOffs from "@/pages/write-offs";
+import WriteOffs2 from "@/pages/write-offs-2";
 
 function Router() {
   return (
@@ -25,6 +26,7 @@ function Router() {
       <Route path="/drafter" component={ContractDrafter} />
       <Route path="/drafter/:contractId" component={ContractDrafter} />
       <Route path="/write-offs" component={WriteOffs} />
+      <Route path="/write-offs-2" component={WriteOffs2} />
       <Route component={NotFound} />
     </Switch>
   );
