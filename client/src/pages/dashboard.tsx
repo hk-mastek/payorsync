@@ -1,5 +1,4 @@
 import { useState, useMemo, useCallback } from "react";
-import { USMap } from "@/components/USMap";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -479,10 +478,10 @@ export default function Dashboard() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <MapPin className="h-5 w-5" />
-                Geographic Distribution
+                Top States by Variance
               </CardTitle>
               <CardDescription>
-                Click a state to filter • Click outside to clear
+                Click a bar to filter • Click outside to clear
                 {selectedState !== "all" && (
                   <Badge variant="secondary" className="ml-2">{selectedState}</Badge>
                 )}
@@ -492,23 +491,57 @@ export default function Dashboard() {
               <div 
                 className="h-[300px]"
                 onClick={(e) => {
-                  if (e.target === e.currentTarget && selectedState !== "all") {
+                  const target = e.target as HTMLElement;
+                  if (!target.closest('.recharts-bar-rectangle') && selectedState !== "all") {
                     setSelectedState("all");
                   }
                 }}
               >
-                <USMap
-                  data={stateData}
-                  selectedState={selectedState === "all" ? null : selectedState}
-                  onStateClick={(stateCode) => {
-                    if (selectedState === stateCode) {
-                      setSelectedState("all");
-                    } else {
-                      setSelectedState(stateCode);
-                    }
-                  }}
-                  formatCurrency={formatCurrency}
-                />
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={stateData.slice(0, 15)} layout="vertical" margin={{ left: 60, right: 20, top: 10, bottom: 10 }}>
+                    <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
+                    <XAxis 
+                      type="number" 
+                      tickFormatter={(value) => formatCurrency(value)}
+                      tick={{ fontSize: 11 }}
+                    />
+                    <YAxis 
+                      type="category" 
+                      dataKey="state" 
+                      tick={{ fontSize: 11 }}
+                      width={50}
+                    />
+                    <Tooltip 
+                      contentStyle={{ backgroundColor: 'hsl(var(--card))', borderRadius: '8px', border: '1px solid hsl(var(--border))' }}
+                      formatter={(value: number, name: string) => [formatCurrency(value), 'Variance Amount']}
+                      labelFormatter={(label) => {
+                        const state = stateData.find(s => s.state === label);
+                        return state ? `${state.stateName} (${state.count} variances)` : label;
+                      }}
+                    />
+                    <Bar 
+                      dataKey="amount" 
+                      radius={[0, 4, 4, 0]}
+                      cursor="pointer"
+                      onClick={(data, index, e) => {
+                        e?.stopPropagation();
+                        if (selectedState === data.state) {
+                          setSelectedState("all");
+                        } else {
+                          setSelectedState(data.state);
+                        }
+                      }}
+                    >
+                      {stateData.slice(0, 15).map((entry, index) => (
+                        <Cell 
+                          key={`cell-${index}`} 
+                          fill={selectedState === entry.state ? '#0284c7' : index < 3 ? '#dc2626' : index < 6 ? '#ea580c' : index < 10 ? '#eab308' : '#22c55e'}
+                          opacity={selectedState === "all" || selectedState === entry.state ? 1 : 0.4}
+                        />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
               </div>
             </CardContent>
           </Card>
