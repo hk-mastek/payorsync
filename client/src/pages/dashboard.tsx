@@ -487,7 +487,7 @@ export default function Dashboard() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Users className="h-5 w-5" />
-                Variance by Payor Type
+                Root Cause Analysis
               </CardTitle>
               <CardDescription>
                 Click a bar to filter • Click outside to clear
@@ -622,7 +622,7 @@ export default function Dashboard() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Users className="h-5 w-5" />
-              Variance by Payor Type (Sunburst)
+              Payor Distribution (Sunburst)
             </CardTitle>
             <CardDescription>
               Click a segment to drill down into individual payors
