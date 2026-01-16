@@ -205,7 +205,7 @@ export default function Dashboard() {
     ...s,
     count: Math.round(s.count * SCALE_FACTOR),
     amount: Math.round(s.amount * SCALE_FACTOR),
-  })), [rawStateData, SCALE_FACTOR]);
+  })).sort((a, b) => b.amount - a.amount), [rawStateData, SCALE_FACTOR]);
   
   const rawRootCauseData = useMemo(() => groupByRootCause(filteredData), [filteredData]);
   const rootCauseData = useMemo(() => rawRootCauseData.map(rc => ({
@@ -487,7 +487,7 @@ export default function Dashboard() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <MapPin className="h-5 w-5" />
-                Top States by Variance
+                Variance by State
               </CardTitle>
               <CardDescription>
                 Click a bar to filter • Click outside to clear
@@ -497,61 +497,63 @@ export default function Dashboard() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div 
-                className="h-[300px]"
-                onClick={(e) => {
-                  const target = e.target as HTMLElement;
-                  if (!target.closest('.recharts-bar-rectangle') && selectedState !== "all") {
-                    setSelectedState("all");
-                  }
-                }}
-              >
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={stateData.slice(0, 15)} layout="vertical" margin={{ left: 60, right: 20, top: 10, bottom: 10 }}>
-                    <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
-                    <XAxis 
-                      type="number" 
-                      tickFormatter={(value) => formatCurrency(value)}
-                      tick={{ fontSize: 11 }}
-                    />
-                    <YAxis 
-                      type="category" 
-                      dataKey="state" 
-                      tick={{ fontSize: 11 }}
-                      width={50}
-                    />
-                    <Tooltip 
-                      contentStyle={{ backgroundColor: 'hsl(var(--card))', borderRadius: '8px', border: '1px solid hsl(var(--border))' }}
-                      formatter={(value: number, name: string) => [formatCurrency(value), 'Variance Amount']}
-                      labelFormatter={(label) => {
-                        const state = stateData.find(s => s.state === label);
-                        return state ? `${state.stateName} (${state.count} variances)` : label;
-                      }}
-                    />
-                    <Bar 
-                      dataKey="amount" 
-                      radius={[0, 4, 4, 0]}
-                      cursor="pointer"
-                      onClick={(data, index, e) => {
-                        e?.stopPropagation();
-                        if (selectedState === data.state) {
-                          setSelectedState("all");
-                        } else {
-                          setSelectedState(data.state);
-                        }
-                      }}
-                    >
-                      {stateData.slice(0, 15).map((entry, index) => (
-                        <Cell 
-                          key={`cell-${index}`} 
-                          fill={selectedState === entry.state ? '#0284c7' : index < 3 ? '#dc2626' : index < 6 ? '#ea580c' : index < 10 ? '#eab308' : '#22c55e'}
-                          opacity={selectedState === "all" || selectedState === entry.state ? 1 : 0.4}
-                        />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+              <ScrollArea className="h-[400px]">
+                <div 
+                  style={{ height: `${stateData.length * 28}px`, minHeight: '400px' }}
+                  onClick={(e) => {
+                    const target = e.target as HTMLElement;
+                    if (!target.closest('.recharts-bar-rectangle') && selectedState !== "all") {
+                      setSelectedState("all");
+                    }
+                  }}
+                >
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={stateData} layout="vertical" margin={{ left: 40, right: 20, top: 10, bottom: 10 }}>
+                      <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
+                      <XAxis 
+                        type="number" 
+                        tickFormatter={(value) => formatCurrency(value)}
+                        tick={{ fontSize: 11 }}
+                      />
+                      <YAxis 
+                        type="category" 
+                        dataKey="state" 
+                        tick={{ fontSize: 11 }}
+                        width={35}
+                      />
+                      <Tooltip 
+                        contentStyle={{ backgroundColor: 'hsl(var(--card))', borderRadius: '8px', border: '1px solid hsl(var(--border))' }}
+                        formatter={(value: number, name: string) => [formatCurrency(value), 'Variance Amount']}
+                        labelFormatter={(label) => {
+                          const state = stateData.find(s => s.state === label);
+                          return state ? `${state.stateName} (${state.count} variances)` : label;
+                        }}
+                      />
+                      <Bar 
+                        dataKey="amount" 
+                        radius={[0, 4, 4, 0]}
+                        cursor="pointer"
+                        onClick={(data, index, e) => {
+                          e?.stopPropagation();
+                          if (selectedState === data.state) {
+                            setSelectedState("all");
+                          } else {
+                            setSelectedState(data.state);
+                          }
+                        }}
+                      >
+                        {stateData.map((entry, index) => (
+                          <Cell 
+                            key={`cell-${index}`} 
+                            fill={selectedState === entry.state ? '#0284c7' : '#3b82f6'}
+                            opacity={selectedState === "all" || selectedState === entry.state ? 1 : 0.25}
+                          />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </ScrollArea>
             </CardContent>
           </Card>
         </div>
