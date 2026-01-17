@@ -88,34 +88,44 @@ function formatNumber(num: number): string {
 }
 
 const ROOT_CAUSE_EXPLANATIONS: Record<string, { title: string; explanation: string; actionable: boolean }> = {
-  'Denial': {
-    title: 'Claim Denial - Likely MSP Coordination Issue',
-    explanation: 'This denial is commonly related to the ESRD 30-month Medicare Secondary Payer (MSP) coordination period. During this window, commercial insurance remains primary before Medicare assumes primary status. Denials often occur when payors incorrectly determine coordination of benefits during the handover phase. Verify the patient\'s dialysis start date and current coordination period month to determine correct primary/secondary payor billing order.',
+  'Authorization Issues': {
+    title: 'Prior Authorization - MSP Coordination Period Problem',
+    explanation: 'Authorization issues in ESRD commonly occur during the 30-month Medicare Secondary Payer (MSP) coordination period when coverage transitions from commercial to Medicare primary. Authorizations obtained from the commercial plan may not transfer when Medicare becomes primary, or the wrong payor was contacted for authorization. Verify the patient\'s dialysis start date to determine coordination month, then confirm authorizations are current for the correct primary payor.',
     actionable: true
   },
-  'Underpayment': {
-    title: 'Payment Below Expected - Coordination Period Rate Issue',
-    explanation: 'Underpayment during ESRD treatment often stems from incorrect rate application during the 30-month coordination period. Commercial payors may apply Medicare rates prematurely, or there may be confusion about which fee schedule applies. Cross-reference the payment against both commercial and Medicare fee schedules based on where the patient is in their coordination period.',
-    actionable: true
-  },
-  'Coding Error': {
-    title: 'Coding Discrepancy - ESRD Modifier/Code Issue',
-    explanation: 'ESRD claims require specific coding including condition codes, modifiers (AY, CD, CE, etc.), and appropriate HCPCS codes for dialysis services. This variance may indicate missing ESRD-specific modifiers, incorrect place of service, or diagnosis code sequencing issues. Verify N18.6 (ESRD) is present and modifiers reflect the coordination period status.',
-    actionable: true
-  },
-  'Contract Discrepancy': {
+  'Contractual Disputes': {
     title: 'Contract Rate Mismatch - Fee Schedule Transition',
-    explanation: 'Payment does not align with contracted rates, which is common during the MSP 30-month transition when commercial contracts and Medicare rates overlap. The commercial payor may have applied post-coordination Medicare rates during the primary period. Document the patient\'s coordination month and compare against the applicable fee schedule in the executed contract.',
+    explanation: 'Payment does not align with contracted rates, which is common during the MSP 30-month transition when commercial contracts and Medicare rates overlap. The commercial payor may have incorrectly applied Medicare bundled rates during their primary period, or vice versa. Document the patient\'s coordination month and compare the payment against the applicable fee schedule in the executed contract for that period.',
     actionable: true
   },
-  'Patient Responsibility': {
-    title: 'Patient Balance - Coordination Period Cost-Sharing',
-    explanation: 'Patient responsibility amounts may vary significantly during the ESRD coordination period based on whether commercial or Medicare is primary. Verify the correct primary payor was billed first and that cost-sharing reflects the appropriate benefits for the coordination period month.',
-    actionable: false
+  'Coding Errors': {
+    title: 'Coding Discrepancy - ESRD Modifier/Code Issue',
+    explanation: 'ESRD claims require specific coding including condition codes (76 for dialysis), modifiers (AY, CD, CE for coordination period), and appropriate HCPCS codes for dialysis services. This variance may indicate missing ESRD-specific modifiers, incorrect place of service (POS 65 for ESRD), or diagnosis code sequencing issues. Verify N18.6 (ESRD) is the primary diagnosis and modifiers correctly reflect the patient\'s coordination period status.',
+    actionable: true
   },
-  'Authorization Issue': {
-    title: 'Prior Authorization - Payor Transition Problem',
-    explanation: 'Authorization issues in ESRD often occur during the payor handover phase when coverage transitions from commercial to Medicare primary. Authorizations obtained from the commercial plan may not transfer, or Medicare may require separate authorization. Verify authorizations are current for the correct primary payor based on the patient\'s coordination period month.',
+  'Patient Eligibility': {
+    title: 'Eligibility Issue - Coordination of Benefits During MSP Period',
+    explanation: 'Patient eligibility variances in ESRD frequently stem from coordination of benefits (COB) confusion during the 30-month transition period. The payor may have incorrect information about whether commercial or Medicare is primary. Verify the patient\'s dialysis start date, calculate their current coordination month, and confirm the correct billing order. COB issues often resolve when the primary/secondary payor sequence is corrected.',
+    actionable: true
+  },
+  'Medical Necessity': {
+    title: 'Medical Necessity - LCD/NCD Documentation Requirements',
+    explanation: 'Medical necessity denials for ESRD services typically involve Local Coverage Determination (LCD) or National Coverage Determination (NCD) requirements. Ensure documentation includes the dialysis prescription, lab values supporting treatment frequency, and physician certification. During the MSP coordination period, both commercial and Medicare may have different medical necessity documentation requirements.',
+    actionable: true
+  },
+  'Claim Submission Errors': {
+    title: 'Claim Submission Error - ESRD Billing Sequence Issue',
+    explanation: 'Claim submission errors in ESRD often involve billing sequence problems during the 30-month coordination period. Common issues include submitting to Medicare before the commercial primary has processed (during months 1-30), missing COB information, or duplicate claims when resubmitting after the payor handover. Verify the correct primary payor received the claim first and EOB/remittance from primary is attached for secondary billing.',
+    actionable: true
+  },
+  'Timely Filing': {
+    title: 'Timely Filing - Coordination Period Deadline Confusion',
+    explanation: 'Timely filing issues in ESRD can occur when claims are held pending coordination of benefits determination during the 30-month transition. Each payor has different filing deadlines (commercial plans vary; Medicare is typically 12 months). If the primary payor determination was delayed, document the timeline and request a timely filing exception based on COB resolution date rather than date of service.',
+    actionable: true
+  },
+  'System/Technical': {
+    title: 'System/Technical - EDI or Clearinghouse Issue',
+    explanation: 'Technical rejections for ESRD claims may involve EDI formatting issues specific to dialysis billing, clearinghouse routing errors during payor transitions, or payer system limitations with coordination period claims. Check the 277CA or 999 acknowledgment for specific rejection codes. Common issues include incorrect payer ID during MSP transitions or loop 2300 COB segment errors.',
     actionable: true
   }
 };
@@ -151,14 +161,17 @@ const PRIORITY_EXPLANATIONS: Record<string, { criteria: string[]; recommendation
 };
 
 function getEDIFormat(rootCauseCategory: string, rootCauseSubcategory: string): { format: string; description: string } {
-  if (rootCauseCategory === 'Denial' || rootCauseCategory === 'Coding Error') {
+  if (rootCauseCategory === 'Coding Errors' || rootCauseCategory === 'Claim Submission Errors') {
     return { format: '837', description: 'Corrected Claim Resubmission' };
   }
-  if (rootCauseCategory === 'Underpayment' || rootCauseCategory === 'Contract Discrepancy') {
+  if (rootCauseCategory === 'Contractual Disputes' || rootCauseCategory === 'Patient Eligibility') {
     return { format: '837-APPEAL', description: 'Adjustment Request with Supporting Documentation' };
   }
-  if (rootCauseCategory === 'Authorization Issue') {
+  if (rootCauseCategory === 'Authorization Issues') {
     return { format: '277', description: 'Claim Status Inquiry' };
+  }
+  if (rootCauseCategory === 'Medical Necessity') {
+    return { format: '837-APPEAL', description: 'Reconsideration with Clinical Documentation' };
   }
   return { format: '837', description: 'Corrected Claim' };
 }
@@ -257,7 +270,7 @@ Action: Request claim status and authorization details`;
 }
 
 function isResubmissionEligible(rootCauseCategory: string): boolean {
-  return ['Denial', 'Coding Error', 'Underpayment', 'Contract Discrepancy', 'Authorization Issue'].includes(rootCauseCategory);
+  return ['Authorization Issues', 'Contractual Disputes', 'Coding Errors', 'Patient Eligibility', 'Medical Necessity', 'Claim Submission Errors'].includes(rootCauseCategory);
 }
 
 interface KPICardProps {
