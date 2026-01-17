@@ -87,6 +87,179 @@ function formatNumber(num: number): string {
   return num.toLocaleString();
 }
 
+const ROOT_CAUSE_EXPLANATIONS: Record<string, { title: string; explanation: string; actionable: boolean }> = {
+  'Denial': {
+    title: 'Claim Denial',
+    explanation: 'The payor has rejected this claim entirely. Common reasons include missing prior authorization, coverage issues, or coding errors. Denials require investigation and often resubmission with corrected information.',
+    actionable: true
+  },
+  'Underpayment': {
+    title: 'Payment Below Expected',
+    explanation: 'The payor paid less than the contracted rate. This may indicate incorrect fee schedule application, bundling issues, or contract interpretation differences. Review the remittance advice for adjustment codes.',
+    actionable: true
+  },
+  'Coding Error': {
+    title: 'Coding Discrepancy',
+    explanation: 'A mismatch between submitted codes and payor expectations. This could involve incorrect CPT/HCPCS codes, missing modifiers, or diagnosis code issues. May require claim correction and resubmission.',
+    actionable: true
+  },
+  'Contract Discrepancy': {
+    title: 'Contract Rate Mismatch',
+    explanation: 'Payment does not align with contracted rates. This requires comparison of the payment against the fee schedule in the executed contract. Document discrepancies for payor negotiation.',
+    actionable: true
+  },
+  'Patient Responsibility': {
+    title: 'Patient Balance Issue',
+    explanation: 'Amounts shifted to patient responsibility (deductible, copay, coinsurance) that may exceed expected amounts. Verify benefits and eligibility at time of service.',
+    actionable: false
+  },
+  'Authorization Issue': {
+    title: 'Prior Authorization Problem',
+    explanation: 'Missing, expired, or incorrect prior authorization. May require obtaining retroactive authorization if available, or appealing with clinical documentation.',
+    actionable: true
+  }
+};
+
+const PRIORITY_EXPLANATIONS: Record<string, { criteria: string[]; recommendation: string }> = {
+  'High': {
+    criteria: [
+      'Variance amount exceeds $500',
+      'Aging over 90 days (approaching timely filing limits)',
+      'High recovery potential based on root cause',
+      'Pattern indicates systemic issue'
+    ],
+    recommendation: 'Prioritize immediate action. Escalate to supervisor if unresolved within 5 business days.'
+  },
+  'Medium': {
+    criteria: [
+      'Variance amount between $100 and $500',
+      'Aging between 30-90 days',
+      'Moderate recovery potential',
+      'Requires standard follow-up procedures'
+    ],
+    recommendation: 'Address within standard workflow. Target resolution within 2 weeks.'
+  },
+  'Low': {
+    criteria: [
+      'Variance amount under $100',
+      'Recently identified (under 30 days)',
+      'Lower recovery potential or patient responsibility',
+      'May resolve through normal payment cycles'
+    ],
+    recommendation: 'Monitor and batch process. Review if status unchanged after 30 days.'
+  }
+};
+
+function getEDIFormat(rootCauseCategory: string, rootCauseSubcategory: string): { format: string; description: string } {
+  if (rootCauseCategory === 'Denial' || rootCauseCategory === 'Coding Error') {
+    return { format: '837', description: 'Corrected Claim Resubmission' };
+  }
+  if (rootCauseCategory === 'Underpayment' || rootCauseCategory === 'Contract Discrepancy') {
+    return { format: '837-APPEAL', description: 'Adjustment Request with Supporting Documentation' };
+  }
+  if (rootCauseCategory === 'Authorization Issue') {
+    return { format: '277', description: 'Claim Status Inquiry' };
+  }
+  return { format: '837', description: 'Corrected Claim' };
+}
+
+function generateEDIDraft(variance: VarianceRecord): string {
+  const ediFormat = getEDIFormat(variance.rootCauseCategory, variance.rootCauseSubcategory);
+  const today = new Date().toISOString().split('T')[0].replace(/-/g, '');
+  const claimId = variance.id.replace('VAR-', 'CLM-');
+  
+  if (ediFormat.format === '837') {
+    return `ISA*00*          *00*          *ZZ*PAYORSYNC      *ZZ*${variance.payorId.padEnd(15)}*${today}*1200*^*00501*000000001*0*P*:~
+GS*HC*PAYORSYNC*${variance.payorId}*${today}*1200*1*X*005010X222A1~
+ST*837*0001*005010X222A1~
+BHT*0019*00*${claimId}*${today}*1200*CH~
+NM1*41*2*PAYORSYNC BILLING*****46*123456789~
+NM1*40*2*${variance.payorName.substring(0, 35).toUpperCase()}*****46*${variance.payorId}~
+HL*1**20*1~
+NM1*85*2*DIALYSIS SERVICES CENTER*****XX*1234567890~
+HL*2*1*22*0~
+NM1*IL*1*${variance.patientName.split(' ').pop()?.toUpperCase()}*${variance.patientName.split(' ')[0]?.toUpperCase()}****MI*MEM123456~
+CLM*${claimId}*${variance.billedAmount.toFixed(2)}***11:B:1*Y*A*Y*Y~
+HI*ABK:N189~
+LX*1~
+SV2*0300*HC:90999*${variance.billedAmount.toFixed(2)}*UN*${variance.treatmentCount}~
+DTP*472*D8*${variance.dateOfService.replace(/-/g, '')}~
+SE*15*0001~
+GE*1*1~
+IEA*1*000000001~
+
+--- RESUBMISSION NOTES ---
+Original Claim ID: ${variance.id}
+Root Cause: ${variance.rootCauseCategory} - ${variance.rootCauseSubcategory}
+Variance Amount: $${variance.varianceAmount.toFixed(2)}
+Action Required: Correct claim data and resubmit`;
+  }
+  
+  if (ediFormat.format === '837-APPEAL') {
+    return `ISA*00*          *00*          *ZZ*PAYORSYNC      *ZZ*${variance.payorId.padEnd(15)}*${today}*1200*^*00501*000000001*0*P*:~
+GS*HC*PAYORSYNC*${variance.payorId}*${today}*1200*1*X*005010X222A1~
+ST*837*0001*005010X222A1~
+BHT*0019*18*${claimId}*${today}*1200*CH~
+NM1*41*2*PAYORSYNC BILLING*****46*123456789~
+NM1*40*2*${variance.payorName.substring(0, 35).toUpperCase()}*****46*${variance.payorId}~
+HL*1**20*1~
+NM1*85*2*DIALYSIS SERVICES CENTER*****XX*1234567890~
+HL*2*1*22*0~
+NM1*IL*1*${variance.patientName.split(' ').pop()?.toUpperCase()}*${variance.patientName.split(' ')[0]?.toUpperCase()}****MI*MEM123456~
+CLM*${claimId}*${variance.billedAmount.toFixed(2)}***11:B:1*Y*A*Y*Y~
+REF*F8*APPEAL~
+NTE*ADD*PAYMENT ADJUSTMENT REQUEST: Original payment of $${variance.paidAmount.toFixed(2)} does not match contracted rate. Requesting additional payment of $${variance.varianceAmount.toFixed(2)} per fee schedule agreement.~
+HI*ABK:N189~
+LX*1~
+SV2*0300*HC:90999*${variance.billedAmount.toFixed(2)}*UN*${variance.treatmentCount}~
+DTP*472*D8*${variance.dateOfService.replace(/-/g, '')}~
+SE*18*0001~
+GE*1*1~
+IEA*1*000000001~
+
+--- ADJUSTMENT REQUEST NOTES ---
+Original Claim ID: ${variance.id}
+Expected Payment: $${variance.billedAmount.toFixed(2)}
+Actual Payment: $${variance.paidAmount.toFixed(2)}
+Underpayment Amount: $${variance.varianceAmount.toFixed(2)}
+Contract Reference: Review fee schedule for ${variance.payorName}
+
+REQUIRED ATTACHMENTS:
+1. Copy of executed contract with fee schedule
+2. Original remittance advice (835) showing underpayment
+3. Claim calculation worksheet demonstrating correct reimbursement`;
+  }
+  
+  // 277 format
+  return `ISA*00*          *00*          *ZZ*PAYORSYNC      *ZZ*${variance.payorId.padEnd(15)}*${today}*1200*^*00501*000000001*0*P*:~
+GS*HN*PAYORSYNC*${variance.payorId}*${today}*1200*1*X*005010X212~
+ST*277*0001*005010X212~
+BHT*0085*08*${claimId}*${today}*1200~
+HL*1**20*1~
+NM1*PR*2*${variance.payorName.substring(0, 35).toUpperCase()}*****PI*${variance.payorId}~
+HL*2*1*21*1~
+NM1*41*2*DIALYSIS SERVICES CENTER*****46*123456789~
+HL*3*2*19*0~
+NM1*QC*1*${variance.patientName.split(' ').pop()?.toUpperCase()}*${variance.patientName.split(' ')[0]?.toUpperCase()}****MI*MEM123456~
+TRN*2*${claimId}*1234567890~
+STC*P3:20*${today}**${variance.billedAmount.toFixed(2)}~
+REF*1K*${claimId}~
+DTP*472*D8*${variance.dateOfService.replace(/-/g, '')}~
+SE*13*0001~
+GE*1*1~
+IEA*1*000000001~
+
+--- STATUS INQUIRY NOTES ---
+Claim ID: ${variance.id}
+Issue: ${variance.rootCauseCategory} - ${variance.rootCauseSubcategory}
+Authorization Status: Requires verification
+Action: Request claim status and authorization details`;
+}
+
+function isResubmissionEligible(rootCauseCategory: string): boolean {
+  return ['Denial', 'Coding Error', 'Underpayment', 'Contract Discrepancy', 'Authorization Issue'].includes(rootCauseCategory);
+}
+
 interface KPICardProps {
   title: string;
   value: string;
@@ -141,6 +314,8 @@ export default function Dashboard() {
   const [detailItem, setDetailItem] = useState<string | null>(null);
   const [sunburstSelectedType, setSunburstSelectedType] = useState<string | null>(null);
   const [highlightedState, setHighlightedState] = useState<string | null>(null);
+  const [selectedVariance, setSelectedVariance] = useState<VarianceRecord | null>(null);
+  const [showResubmissionDraft, setShowResubmissionDraft] = useState(false);
   
   const SCALE_FACTOR = 324;
   const WEEKLY_VARIANCES = 13696;
@@ -897,7 +1072,12 @@ export default function Dashboard() {
                 </TableHeader>
                 <TableBody>
                   {paginatedData.map((row) => (
-                    <TableRow key={row.id} className="cursor-pointer hover:bg-muted/50">
+                    <TableRow 
+                      key={row.id} 
+                      className="cursor-pointer hover:bg-muted/50"
+                      onClick={() => { setSelectedVariance(row); setShowResubmissionDraft(false); }}
+                      data-testid={`variance-row-${row.id}`}
+                    >
                       <TableCell className="font-mono text-xs">{row.id}</TableCell>
                       <TableCell>
                         <div className="flex flex-col">
@@ -1004,6 +1184,177 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+      
+      <Sheet open={!!selectedVariance} onOpenChange={(open) => { if (!open) { setSelectedVariance(null); setShowResubmissionDraft(false); } }}>
+        <SheetContent className="w-[500px] sm:w-[600px] overflow-y-auto">
+          {selectedVariance && (
+            <>
+              <SheetHeader className="pb-4 border-b">
+                <SheetTitle className="flex items-center gap-2">
+                  <FileText className="h-5 w-5 text-primary" />
+                  Variance Details
+                </SheetTitle>
+                <SheetDescription>
+                  {selectedVariance.id} - {selectedVariance.payorName}
+                </SheetDescription>
+              </SheetHeader>
+              
+              <div className="space-y-6 py-6">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Patient</p>
+                    <p className="font-medium">{selectedVariance.patientName}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Date of Service</p>
+                    <p className="font-medium">{selectedVariance.dateOfService}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Billed Amount</p>
+                    <p className="font-medium">${selectedVariance.billedAmount.toFixed(2)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Paid Amount</p>
+                    <p className="font-medium">${selectedVariance.paidAmount.toFixed(2)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Variance</p>
+                    <p className="font-medium text-rose-600">-${selectedVariance.varianceAmount.toFixed(2)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Aging</p>
+                    <p className={cn(
+                      "font-medium",
+                      selectedVariance.agingDays > 120 ? "text-rose-600" : 
+                      selectedVariance.agingDays > 60 ? "text-amber-600" : ""
+                    )}>{selectedVariance.agingDays} days</p>
+                  </div>
+                </div>
+                
+                <div className="space-y-3">
+                  <h4 className="font-semibold flex items-center gap-2">
+                    <AlertCircle className="h-4 w-4 text-amber-500" />
+                    Root Cause Analysis
+                  </h4>
+                  <Card className="bg-muted/30">
+                    <CardContent className="pt-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Badge variant="outline">{selectedVariance.rootCauseCategory}</Badge>
+                        <span className="text-sm text-muted-foreground">{selectedVariance.rootCauseSubcategory}</span>
+                      </div>
+                      <p className="text-sm font-medium mb-1">
+                        {ROOT_CAUSE_EXPLANATIONS[selectedVariance.rootCauseCategory]?.title || selectedVariance.rootCauseCategory}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {ROOT_CAUSE_EXPLANATIONS[selectedVariance.rootCauseCategory]?.explanation || 
+                         'This variance requires further investigation to determine the root cause and appropriate resolution path.'}
+                      </p>
+                    </CardContent>
+                  </Card>
+                </div>
+                
+                <div className="space-y-3">
+                  <h4 className="font-semibold flex items-center gap-2">
+                    <TrendingUp className="h-4 w-4 text-primary" />
+                    Priority Assessment
+                  </h4>
+                  <Card className={cn(
+                    "border-2",
+                    selectedVariance.priority === 'High' && "border-rose-200 bg-rose-50/30",
+                    selectedVariance.priority === 'Medium' && "border-amber-200 bg-amber-50/30",
+                    selectedVariance.priority === 'Low' && "border-gray-200 bg-gray-50/30"
+                  )}>
+                    <CardContent className="pt-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Badge variant="outline" className={cn(
+                          selectedVariance.priority === 'High' && "border-rose-500 text-rose-600",
+                          selectedVariance.priority === 'Medium' && "border-amber-500 text-amber-600",
+                          selectedVariance.priority === 'Low' && "border-gray-400 text-gray-500"
+                        )}>
+                          {selectedVariance.priority} Priority
+                        </Badge>
+                      </div>
+                      <p className="text-xs font-medium mb-2 text-muted-foreground">Why this priority?</p>
+                      <ul className="text-sm space-y-1 mb-3">
+                        {PRIORITY_EXPLANATIONS[selectedVariance.priority]?.criteria.map((criterion, i) => (
+                          <li key={i} className="flex items-start gap-2">
+                            <CheckCircle className="h-3 w-3 mt-1 text-emerald-500 flex-shrink-0" />
+                            <span className="text-muted-foreground">{criterion}</span>
+                          </li>
+                        ))}
+                      </ul>
+                      <p className="text-sm font-medium">
+                        {PRIORITY_EXPLANATIONS[selectedVariance.priority]?.recommendation}
+                      </p>
+                    </CardContent>
+                  </Card>
+                </div>
+                
+                {isResubmissionEligible(selectedVariance.rootCauseCategory) && (
+                  <div className="space-y-3">
+                    <h4 className="font-semibold flex items-center gap-2">
+                      <RefreshCw className="h-4 w-4 text-blue-500" />
+                      Resubmission Options
+                    </h4>
+                    <Card className="bg-blue-50/30 border-blue-200">
+                      <CardContent className="pt-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <div>
+                            <p className="text-sm font-medium">EDI {getEDIFormat(selectedVariance.rootCauseCategory, selectedVariance.rootCauseSubcategory).format} Format</p>
+                            <p className="text-xs text-muted-foreground">
+                              {getEDIFormat(selectedVariance.rootCauseCategory, selectedVariance.rootCauseSubcategory).description}
+                            </p>
+                          </div>
+                          <Button 
+                            size="sm" 
+                            onClick={() => setShowResubmissionDraft(!showResubmissionDraft)}
+                            data-testid="button-generate-edi"
+                          >
+                            {showResubmissionDraft ? 'Hide Draft' : 'Generate Draft'}
+                          </Button>
+                        </div>
+                        {showResubmissionDraft && (
+                          <div className="mt-4">
+                            <div className="flex items-center justify-between mb-2">
+                              <p className="text-xs font-medium text-muted-foreground">EDI Draft Preview</p>
+                              <Button 
+                                variant="ghost" 
+                                size="sm"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(generateEDIDraft(selectedVariance));
+                                }}
+                                data-testid="button-copy-edi"
+                              >
+                                <Download className="h-3 w-3 mr-1" />
+                                Copy
+                              </Button>
+                            </div>
+                            <ScrollArea className="h-[200px] rounded border bg-slate-900 p-3">
+                              <pre className="text-xs text-green-400 font-mono whitespace-pre-wrap">
+                                {generateEDIDraft(selectedVariance)}
+                              </pre>
+                            </ScrollArea>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </div>
+                )}
+                
+                <div className="flex gap-2 pt-4 border-t">
+                  <Button 
+                    className="flex-1" 
+                    onClick={() => { setSelectedVariance(null); setShowResubmissionDraft(false); }}
+                    data-testid="button-close-detail"
+                  >
+                    Close
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
     </DashboardLayout>
   );
 }
