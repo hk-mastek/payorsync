@@ -91,80 +91,80 @@ const ROOT_CAUSE_EXPLANATIONS: Record<string, { title: string; bullets: string[]
   'Authorization Issues': {
     title: 'Prior Authorization - MSP Coordination Issue',
     bullets: [
-      'Verify patient dialysis start date and current coordination month',
-      'Confirm authorization obtained from correct primary payor',
-      'Check if commercial auth transferred when Medicare became primary',
-      'Request retroactive authorization if within payor guidelines'
+      'Authorization was likely obtained from wrong payor during 30-month coordination period',
+      'Commercial authorization may not have transferred when Medicare became primary',
+      'Payor denied claim because auth was issued by secondary instead of current primary',
+      'Auth may have expired during the coordination period transition'
     ],
     actionable: true
   },
   'Contractual Disputes': {
     title: 'Contract Rate Mismatch',
     bullets: [
-      'Determine patient coordination period month at date of service',
-      'Compare payment to applicable fee schedule (commercial vs Medicare)',
-      'Document rate discrepancy with contract reference',
-      'Submit adjustment request with fee schedule evidence'
+      'Payor applied incorrect fee schedule for the coordination period month',
+      'Commercial payor may have used Medicare bundled rates prematurely',
+      'Payment reflects post-coordination rates while patient was still in primary period',
+      'Fee schedule in payor system may not match executed contract terms'
     ],
     actionable: true
   },
   'Coding Errors': {
     title: 'ESRD Coding Discrepancy',
     bullets: [
-      'Verify N18.6 (ESRD) as primary diagnosis',
-      'Check condition code 76 and coordination modifiers (AY, CD, CE)',
-      'Confirm place of service (POS 65 for ESRD facility)',
-      'Validate HCPCS codes match dialysis services rendered'
+      'ESRD coordination modifier (AY, CD, CE) missing or incorrect for period month',
+      'Condition code 76 not present to indicate dialysis services',
+      'N18.6 diagnosis not sequenced as primary or missing from claim',
+      'Place of service code does not match ESRD facility designation'
     ],
     actionable: true
   },
   'Patient Eligibility': {
     title: 'Eligibility - COB During MSP Period',
     bullets: [
-      'Calculate coordination month from dialysis start date',
-      'Verify correct primary/secondary payor sequence',
-      'Update COB information with both payors if needed',
-      'Rebill with corrected payor order'
+      'Payor has incorrect information about primary/secondary status',
+      'Coordination of benefits not updated after 30-month transition',
+      'Claim billed to Medicare as primary when commercial should still be primary',
+      'Patient eligibility file shows wrong coordination period month'
     ],
     actionable: true
   },
   'Medical Necessity': {
     title: 'Medical Necessity - LCD/NCD Requirements',
     bullets: [
-      'Review LCD/NCD criteria for dialysis services',
-      'Ensure dialysis prescription and labs are documented',
-      'Obtain physician certification if required',
-      'Submit reconsideration with clinical documentation'
+      'Documentation does not meet LCD/NCD criteria for dialysis frequency',
+      'Physician certification or dialysis prescription not on file',
+      'Lab values supporting treatment frequency not documented',
+      'Clinical notes insufficient to justify billed services'
     ],
     actionable: true
   },
   'Claim Submission Errors': {
     title: 'Claim Submission - Billing Sequence Issue',
     bullets: [
-      'Confirm primary payor processed claim first',
-      'Attach EOB/remittance from primary for secondary billing',
-      'Check for duplicate claim submissions',
-      'Verify COB segments populated correctly'
+      'Secondary payor denied because primary EOB/remittance not attached',
+      'Claim submitted to Medicare before commercial primary processed',
+      'COB information missing or incorrect in claim submission',
+      'Duplicate claim flagged due to resubmission during payor transition'
     ],
     actionable: true
   },
   'Timely Filing': {
     title: 'Timely Filing - Deadline Issue',
     bullets: [
-      'Document COB determination timeline',
-      'Request filing exception based on COB resolution date',
-      'Provide evidence of initial submission attempts',
-      'Note payor-specific filing limits (Medicare: 12 months)'
+      'Claim held pending COB determination exceeded filing deadline',
+      'Payor transition delayed submission past timely filing limit',
+      'Initial submission to wrong primary caused deadline to pass',
+      'Appeal or corrected claim filed after payor deadline expired'
     ],
     actionable: true
   },
   'System/Technical': {
     title: 'Technical - EDI/Clearinghouse Issue',
     bullets: [
-      'Review 277CA or 999 acknowledgment for rejection codes',
-      'Verify correct payer ID for current primary',
-      'Check loop 2300 COB segment formatting',
-      'Resubmit through alternate clearinghouse if needed'
+      'EDI rejected due to incorrect payer ID during MSP transition',
+      'Loop 2300 COB segment formatting error caused rejection',
+      'Clearinghouse routing sent claim to wrong payor',
+      '999/277CA acknowledgment indicates technical syntax error'
     ],
     actionable: true
   }
