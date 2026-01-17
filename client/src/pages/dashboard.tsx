@@ -87,45 +87,85 @@ function formatNumber(num: number): string {
   return num.toLocaleString();
 }
 
-const ROOT_CAUSE_EXPLANATIONS: Record<string, { title: string; explanation: string; actionable: boolean }> = {
+const ROOT_CAUSE_EXPLANATIONS: Record<string, { title: string; bullets: string[]; actionable: boolean }> = {
   'Authorization Issues': {
-    title: 'Prior Authorization - MSP Coordination Period Problem',
-    explanation: 'Authorization issues in ESRD commonly occur during the 30-month Medicare Secondary Payer (MSP) coordination period when coverage transitions from commercial to Medicare primary. Authorizations obtained from the commercial plan may not transfer when Medicare becomes primary, or the wrong payor was contacted for authorization. Verify the patient\'s dialysis start date to determine coordination month, then confirm authorizations are current for the correct primary payor.',
+    title: 'Prior Authorization - MSP Coordination Issue',
+    bullets: [
+      'Verify patient dialysis start date and current coordination month',
+      'Confirm authorization obtained from correct primary payor',
+      'Check if commercial auth transferred when Medicare became primary',
+      'Request retroactive authorization if within payor guidelines'
+    ],
     actionable: true
   },
   'Contractual Disputes': {
-    title: 'Contract Rate Mismatch - Fee Schedule Transition',
-    explanation: 'Payment does not align with contracted rates, which is common during the MSP 30-month transition when commercial contracts and Medicare rates overlap. The commercial payor may have incorrectly applied Medicare bundled rates during their primary period, or vice versa. Document the patient\'s coordination month and compare the payment against the applicable fee schedule in the executed contract for that period.',
+    title: 'Contract Rate Mismatch',
+    bullets: [
+      'Determine patient coordination period month at date of service',
+      'Compare payment to applicable fee schedule (commercial vs Medicare)',
+      'Document rate discrepancy with contract reference',
+      'Submit adjustment request with fee schedule evidence'
+    ],
     actionable: true
   },
   'Coding Errors': {
-    title: 'Coding Discrepancy - ESRD Modifier/Code Issue',
-    explanation: 'ESRD claims require specific coding including condition codes (76 for dialysis), modifiers (AY, CD, CE for coordination period), and appropriate HCPCS codes for dialysis services. This variance may indicate missing ESRD-specific modifiers, incorrect place of service (POS 65 for ESRD), or diagnosis code sequencing issues. Verify N18.6 (ESRD) is the primary diagnosis and modifiers correctly reflect the patient\'s coordination period status.',
+    title: 'ESRD Coding Discrepancy',
+    bullets: [
+      'Verify N18.6 (ESRD) as primary diagnosis',
+      'Check condition code 76 and coordination modifiers (AY, CD, CE)',
+      'Confirm place of service (POS 65 for ESRD facility)',
+      'Validate HCPCS codes match dialysis services rendered'
+    ],
     actionable: true
   },
   'Patient Eligibility': {
-    title: 'Eligibility Issue - Coordination of Benefits During MSP Period',
-    explanation: 'Patient eligibility variances in ESRD frequently stem from coordination of benefits (COB) confusion during the 30-month transition period. The payor may have incorrect information about whether commercial or Medicare is primary. Verify the patient\'s dialysis start date, calculate their current coordination month, and confirm the correct billing order. COB issues often resolve when the primary/secondary payor sequence is corrected.',
+    title: 'Eligibility - COB During MSP Period',
+    bullets: [
+      'Calculate coordination month from dialysis start date',
+      'Verify correct primary/secondary payor sequence',
+      'Update COB information with both payors if needed',
+      'Rebill with corrected payor order'
+    ],
     actionable: true
   },
   'Medical Necessity': {
-    title: 'Medical Necessity - LCD/NCD Documentation Requirements',
-    explanation: 'Medical necessity denials for ESRD services typically involve Local Coverage Determination (LCD) or National Coverage Determination (NCD) requirements. Ensure documentation includes the dialysis prescription, lab values supporting treatment frequency, and physician certification. During the MSP coordination period, both commercial and Medicare may have different medical necessity documentation requirements.',
+    title: 'Medical Necessity - LCD/NCD Requirements',
+    bullets: [
+      'Review LCD/NCD criteria for dialysis services',
+      'Ensure dialysis prescription and labs are documented',
+      'Obtain physician certification if required',
+      'Submit reconsideration with clinical documentation'
+    ],
     actionable: true
   },
   'Claim Submission Errors': {
-    title: 'Claim Submission Error - ESRD Billing Sequence Issue',
-    explanation: 'Claim submission errors in ESRD often involve billing sequence problems during the 30-month coordination period. Common issues include submitting to Medicare before the commercial primary has processed (during months 1-30), missing COB information, or duplicate claims when resubmitting after the payor handover. Verify the correct primary payor received the claim first and EOB/remittance from primary is attached for secondary billing.',
+    title: 'Claim Submission - Billing Sequence Issue',
+    bullets: [
+      'Confirm primary payor processed claim first',
+      'Attach EOB/remittance from primary for secondary billing',
+      'Check for duplicate claim submissions',
+      'Verify COB segments populated correctly'
+    ],
     actionable: true
   },
   'Timely Filing': {
-    title: 'Timely Filing - Coordination Period Deadline Confusion',
-    explanation: 'Timely filing issues in ESRD can occur when claims are held pending coordination of benefits determination during the 30-month transition. Each payor has different filing deadlines (commercial plans vary; Medicare is typically 12 months). If the primary payor determination was delayed, document the timeline and request a timely filing exception based on COB resolution date rather than date of service.',
+    title: 'Timely Filing - Deadline Issue',
+    bullets: [
+      'Document COB determination timeline',
+      'Request filing exception based on COB resolution date',
+      'Provide evidence of initial submission attempts',
+      'Note payor-specific filing limits (Medicare: 12 months)'
+    ],
     actionable: true
   },
   'System/Technical': {
-    title: 'System/Technical - EDI or Clearinghouse Issue',
-    explanation: 'Technical rejections for ESRD claims may involve EDI formatting issues specific to dialysis billing, clearinghouse routing errors during payor transitions, or payer system limitations with coordination period claims. Check the 277CA or 999 acknowledgment for specific rejection codes. Common issues include incorrect payer ID during MSP transitions or loop 2300 COB segment errors.',
+    title: 'Technical - EDI/Clearinghouse Issue',
+    bullets: [
+      'Review 277CA or 999 acknowledgment for rejection codes',
+      'Verify correct payer ID for current primary',
+      'Check loop 2300 COB segment formatting',
+      'Resubmit through alternate clearinghouse if needed'
+    ],
     actionable: true
   }
 };
@@ -1259,13 +1299,19 @@ export default function Dashboard() {
                         <Badge variant="outline">{selectedVariance.rootCauseCategory}</Badge>
                         <span className="text-sm text-muted-foreground">{selectedVariance.rootCauseSubcategory}</span>
                       </div>
-                      <p className="text-sm font-medium mb-1">
+                      <p className="text-sm font-medium mb-2">
                         {ROOT_CAUSE_EXPLANATIONS[selectedVariance.rootCauseCategory]?.title || selectedVariance.rootCauseCategory}
                       </p>
-                      <p className="text-sm text-muted-foreground">
-                        {ROOT_CAUSE_EXPLANATIONS[selectedVariance.rootCauseCategory]?.explanation || 
-                         'This variance requires further investigation to determine the root cause and appropriate resolution path.'}
-                      </p>
+                      <ul className="text-sm space-y-1">
+                        {ROOT_CAUSE_EXPLANATIONS[selectedVariance.rootCauseCategory]?.bullets?.map((bullet, i) => (
+                          <li key={i} className="flex items-start gap-2">
+                            <span className="text-primary mt-1">•</span>
+                            <span className="text-muted-foreground">{bullet}</span>
+                          </li>
+                        )) || (
+                          <li className="text-muted-foreground">Further investigation required</li>
+                        )}
+                      </ul>
                     </CardContent>
                   </Card>
                 </div>
