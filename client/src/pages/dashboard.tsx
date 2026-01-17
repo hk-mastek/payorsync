@@ -89,33 +89,33 @@ function formatNumber(num: number): string {
 
 const ROOT_CAUSE_EXPLANATIONS: Record<string, { title: string; explanation: string; actionable: boolean }> = {
   'Denial': {
-    title: 'Claim Denial',
-    explanation: 'The payor has rejected this claim entirely. Common reasons include missing prior authorization, coverage issues, or coding errors. Denials require investigation and often resubmission with corrected information.',
+    title: 'Claim Denial - Likely MSP Coordination Issue',
+    explanation: 'This denial is commonly related to the ESRD 30-month Medicare Secondary Payer (MSP) coordination period. During this window, commercial insurance remains primary before Medicare assumes primary status. Denials often occur when payors incorrectly determine coordination of benefits during the handover phase. Verify the patient\'s dialysis start date and current coordination period month to determine correct primary/secondary payor billing order.',
     actionable: true
   },
   'Underpayment': {
-    title: 'Payment Below Expected',
-    explanation: 'The payor paid less than the contracted rate. This may indicate incorrect fee schedule application, bundling issues, or contract interpretation differences. Review the remittance advice for adjustment codes.',
+    title: 'Payment Below Expected - Coordination Period Rate Issue',
+    explanation: 'Underpayment during ESRD treatment often stems from incorrect rate application during the 30-month coordination period. Commercial payors may apply Medicare rates prematurely, or there may be confusion about which fee schedule applies. Cross-reference the payment against both commercial and Medicare fee schedules based on where the patient is in their coordination period.',
     actionable: true
   },
   'Coding Error': {
-    title: 'Coding Discrepancy',
-    explanation: 'A mismatch between submitted codes and payor expectations. This could involve incorrect CPT/HCPCS codes, missing modifiers, or diagnosis code issues. May require claim correction and resubmission.',
+    title: 'Coding Discrepancy - ESRD Modifier/Code Issue',
+    explanation: 'ESRD claims require specific coding including condition codes, modifiers (AY, CD, CE, etc.), and appropriate HCPCS codes for dialysis services. This variance may indicate missing ESRD-specific modifiers, incorrect place of service, or diagnosis code sequencing issues. Verify N18.6 (ESRD) is present and modifiers reflect the coordination period status.',
     actionable: true
   },
   'Contract Discrepancy': {
-    title: 'Contract Rate Mismatch',
-    explanation: 'Payment does not align with contracted rates. This requires comparison of the payment against the fee schedule in the executed contract. Document discrepancies for payor negotiation.',
+    title: 'Contract Rate Mismatch - Fee Schedule Transition',
+    explanation: 'Payment does not align with contracted rates, which is common during the MSP 30-month transition when commercial contracts and Medicare rates overlap. The commercial payor may have applied post-coordination Medicare rates during the primary period. Document the patient\'s coordination month and compare against the applicable fee schedule in the executed contract.',
     actionable: true
   },
   'Patient Responsibility': {
-    title: 'Patient Balance Issue',
-    explanation: 'Amounts shifted to patient responsibility (deductible, copay, coinsurance) that may exceed expected amounts. Verify benefits and eligibility at time of service.',
+    title: 'Patient Balance - Coordination Period Cost-Sharing',
+    explanation: 'Patient responsibility amounts may vary significantly during the ESRD coordination period based on whether commercial or Medicare is primary. Verify the correct primary payor was billed first and that cost-sharing reflects the appropriate benefits for the coordination period month.',
     actionable: false
   },
   'Authorization Issue': {
-    title: 'Prior Authorization Problem',
-    explanation: 'Missing, expired, or incorrect prior authorization. May require obtaining retroactive authorization if available, or appealing with clinical documentation.',
+    title: 'Prior Authorization - Payor Transition Problem',
+    explanation: 'Authorization issues in ESRD often occur during the payor handover phase when coverage transitions from commercial to Medicare primary. Authorizations obtained from the commercial plan may not transfer, or Medicare may require separate authorization. Verify authorizations are current for the correct primary payor based on the patient\'s coordination period month.',
     actionable: true
   }
 };
@@ -1115,14 +1115,18 @@ export default function Dashboard() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline" className={cn(
-                          "text-xs",
-                          row.priority === 'High' && "border-rose-500 text-rose-600",
-                          row.priority === 'Medium' && "border-amber-500 text-amber-600",
-                          row.priority === 'Low' && "border-gray-400 text-gray-500"
-                        )}>
-                          {row.priority}
-                        </Badge>
+                        {row.status === 'Resolved' ? (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        ) : (
+                          <Badge variant="outline" className={cn(
+                            "text-xs",
+                            row.priority === 'High' && "border-rose-500 text-rose-600",
+                            row.priority === 'Medium' && "border-amber-500 text-amber-600",
+                            row.priority === 'Low' && "border-gray-400 text-gray-500"
+                          )}>
+                            {row.priority}
+                          </Badge>
+                        )}
                       </TableCell>
                       <TableCell className="text-sm">{row.patientName}</TableCell>
                     </TableRow>
@@ -1253,44 +1257,46 @@ export default function Dashboard() {
                   </Card>
                 </div>
                 
-                <div className="space-y-3">
-                  <h4 className="font-semibold flex items-center gap-2">
-                    <TrendingUp className="h-4 w-4 text-primary" />
-                    Priority Assessment
-                  </h4>
-                  <Card className={cn(
-                    "border-2",
-                    selectedVariance.priority === 'High' && "border-rose-200 bg-rose-50/30",
-                    selectedVariance.priority === 'Medium' && "border-amber-200 bg-amber-50/30",
-                    selectedVariance.priority === 'Low' && "border-gray-200 bg-gray-50/30"
-                  )}>
-                    <CardContent className="pt-4">
-                      <div className="flex items-center gap-2 mb-3">
-                        <Badge variant="outline" className={cn(
-                          selectedVariance.priority === 'High' && "border-rose-500 text-rose-600",
-                          selectedVariance.priority === 'Medium' && "border-amber-500 text-amber-600",
-                          selectedVariance.priority === 'Low' && "border-gray-400 text-gray-500"
-                        )}>
-                          {selectedVariance.priority} Priority
-                        </Badge>
-                      </div>
-                      <p className="text-xs font-medium mb-2 text-muted-foreground">Why this priority?</p>
-                      <ul className="text-sm space-y-1 mb-3">
-                        {PRIORITY_EXPLANATIONS[selectedVariance.priority]?.criteria.map((criterion, i) => (
-                          <li key={i} className="flex items-start gap-2">
-                            <CheckCircle className="h-3 w-3 mt-1 text-emerald-500 flex-shrink-0" />
-                            <span className="text-muted-foreground">{criterion}</span>
-                          </li>
-                        ))}
-                      </ul>
-                      <p className="text-sm font-medium">
-                        {PRIORITY_EXPLANATIONS[selectedVariance.priority]?.recommendation}
-                      </p>
-                    </CardContent>
-                  </Card>
-                </div>
+                {selectedVariance.status !== 'Resolved' && (
+                  <div className="space-y-3">
+                    <h4 className="font-semibold flex items-center gap-2">
+                      <TrendingUp className="h-4 w-4 text-primary" />
+                      Priority Assessment
+                    </h4>
+                    <Card className={cn(
+                      "border-2",
+                      selectedVariance.priority === 'High' && "border-rose-200 bg-rose-50/30",
+                      selectedVariance.priority === 'Medium' && "border-amber-200 bg-amber-50/30",
+                      selectedVariance.priority === 'Low' && "border-gray-200 bg-gray-50/30"
+                    )}>
+                      <CardContent className="pt-4">
+                        <div className="flex items-center gap-2 mb-3">
+                          <Badge variant="outline" className={cn(
+                            selectedVariance.priority === 'High' && "border-rose-500 text-rose-600",
+                            selectedVariance.priority === 'Medium' && "border-amber-500 text-amber-600",
+                            selectedVariance.priority === 'Low' && "border-gray-400 text-gray-500"
+                          )}>
+                            {selectedVariance.priority} Priority
+                          </Badge>
+                        </div>
+                        <p className="text-xs font-medium mb-2 text-muted-foreground">Why this priority?</p>
+                        <ul className="text-sm space-y-1 mb-3">
+                          {PRIORITY_EXPLANATIONS[selectedVariance.priority]?.criteria.map((criterion, i) => (
+                            <li key={i} className="flex items-start gap-2">
+                              <CheckCircle className="h-3 w-3 mt-1 text-emerald-500 flex-shrink-0" />
+                              <span className="text-muted-foreground">{criterion}</span>
+                            </li>
+                          ))}
+                        </ul>
+                        <p className="text-sm font-medium">
+                          {PRIORITY_EXPLANATIONS[selectedVariance.priority]?.recommendation}
+                        </p>
+                      </CardContent>
+                    </Card>
+                  </div>
+                )}
                 
-                {isResubmissionEligible(selectedVariance.rootCauseCategory) && (
+                {selectedVariance.status !== 'Resolved' && isResubmissionEligible(selectedVariance.rootCauseCategory) && (
                   <div className="space-y-3">
                     <h4 className="font-semibold flex items-center gap-2">
                       <RefreshCw className="h-4 w-4 text-blue-500" />
