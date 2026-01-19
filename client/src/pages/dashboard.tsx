@@ -555,10 +555,12 @@ export default function Dashboard() {
   const [showResubmissionDraft, setShowResubmissionDraft] = useState(false);
   const [sortColumn, setSortColumn] = useState<string>('varianceAmount');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
-  const [scorecardSortColumn, setScorecardSortColumn] = useState<string>('overallScore');
-  const [scorecardSortDirection, setScorecardSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [scorecardSortColumn, setScorecardSortColumn] = useState<string>('varianceCount');
+  const [scorecardSortDirection, setScorecardSortDirection] = useState<'asc' | 'desc'>('desc');
   const [scorecardPageSize, setScorecardPageSize] = useState(10);
   const [scorecardPage, setScorecardPage] = useState(1);
+  const [scorecardPayorTypeFilter, setScorecardPayorTypeFilter] = useState<string>("all");
+  const [scorecardSearch, setScorecardSearch] = useState<string>("");
   
   const SCALE_FACTOR = 324;
   const WEEKLY_VARIANCES = 13696;
@@ -708,19 +710,22 @@ export default function Dashboard() {
   
   const orgMetrics = useMemo(() => calculateOrgMetrics(allData), [allData]);
   
+  const allPayorScorecards = useMemo(() => calculatePayorScorecards(allData), [allData]);
+  
+  const filteredScorecards = useMemo(() => {
+    return allPayorScorecards.filter(s => {
+      if (scorecardPayorTypeFilter !== "all" && s.payorType !== scorecardPayorTypeFilter) return false;
+      if (scorecardSearch) {
+        return s.payorName.toLowerCase().includes(scorecardSearch.toLowerCase());
+      }
+      return true;
+    });
+  }, [allPayorScorecards, scorecardPayorTypeFilter, scorecardSearch]);
+  
   const payorScorecards = useMemo(() => {
-    const scorecards = calculatePayorScorecards(allData);
-    const SCORE_ORDER = ['A', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D', 'F'];
-    
-    return [...scorecards].sort((a, b) => {
+    return [...filteredScorecards].sort((a, b) => {
       let aVal: any = a[scorecardSortColumn as keyof PayorScorecard];
       let bVal: any = b[scorecardSortColumn as keyof PayorScorecard];
-      
-      if (scorecardSortColumn === 'overallScore') {
-        const aRank = SCORE_ORDER.indexOf(aVal as string);
-        const bRank = SCORE_ORDER.indexOf(bVal as string);
-        return scorecardSortDirection === 'asc' ? aRank - bRank : bRank - aRank;
-      }
       
       if (typeof aVal === 'string') {
         aVal = aVal.toLowerCase();
@@ -731,7 +736,7 @@ export default function Dashboard() {
       if (aVal > bVal) return scorecardSortDirection === 'asc' ? 1 : -1;
       return 0;
     });
-  }, [allData, scorecardSortColumn, scorecardSortDirection]);
+  }, [filteredScorecards, scorecardSortColumn, scorecardSortDirection]);
   
   const paginatedScorecards = useMemo(() => {
     const start = (scorecardPage - 1) * scorecardPageSize;
@@ -739,6 +744,11 @@ export default function Dashboard() {
   }, [payorScorecards, scorecardPage, scorecardPageSize]);
   
   const scorecardTotalPages = Math.ceil(payorScorecards.length / scorecardPageSize);
+  
+  const scorecardPayorTypes = useMemo(() => {
+    const types = new Set(allPayorScorecards.map(s => s.payorType));
+    return Array.from(types).sort();
+  }, [allPayorScorecards]);
   
   const totalPages = Math.ceil(filteredData.length / pageSize);
   
@@ -1231,9 +1241,42 @@ export default function Dashboard() {
 
             {/* Payor Scorecard Table */}
             <div>
-              <div className="flex items-center justify-between mb-3">
+              <div className="flex flex-wrap items-center gap-3 mb-3">
+                <div className="flex items-center gap-2">
+                  <Filter className="h-4 w-4 text-muted-foreground" />
+                  <Select value={scorecardPayorTypeFilter} onValueChange={(v) => { setScorecardPayorTypeFilter(v); setScorecardPage(1); }}>
+                    <SelectTrigger className="w-[180px]" data-testid="scorecard-payor-type-filter">
+                      <SelectValue placeholder="All Payor Types" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white">
+                      <SelectItem value="all">All Payor Types</SelectItem>
+                      {scorecardPayorTypes.map(type => (
+                        <SelectItem key={type} value={type}>{type}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Input
+                  placeholder="Search payors..."
+                  value={scorecardSearch}
+                  onChange={(e) => { setScorecardSearch(e.target.value); setScorecardPage(1); }}
+                  className="w-[200px]"
+                  data-testid="scorecard-search-input"
+                />
+                {(scorecardPayorTypeFilter !== "all" || scorecardSearch) && (
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    onClick={() => { setScorecardPayorTypeFilter("all"); setScorecardSearch(""); setScorecardPage(1); }}
+                    data-testid="scorecard-clear-filters"
+                  >
+                    <X className="h-4 w-4 mr-1" />
+                    Clear
+                  </Button>
+                )}
+                <div className="flex-1" />
                 <div className="text-sm text-muted-foreground">
-                  {payorScorecards.length} payors • Page {scorecardPage} of {scorecardTotalPages}
+                  {payorScorecards.length} payors • Page {scorecardPage} of {Math.max(1, scorecardTotalPages)}
                 </div>
                 <Select value={String(scorecardPageSize)} onValueChange={(v) => { setScorecardPageSize(Number(v)); setScorecardPage(1); }}>
                   <SelectTrigger className="w-[100px]">
@@ -1387,23 +1430,6 @@ export default function Dashboard() {
                           {scorecardSortColumn === 'writeOffAmount' ? (scorecardSortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}
                         </div>
                       </TableHead>
-                      <TableHead 
-                        className="text-center w-[70px] cursor-pointer hover:bg-muted/50"
-                        onClick={() => {
-                          if (scorecardSortColumn === 'overallScore') {
-                            setScorecardSortDirection(d => d === 'asc' ? 'desc' : 'asc');
-                          } else {
-                            setScorecardSortColumn('overallScore');
-                            setScorecardSortDirection('asc');
-                          }
-                          setScorecardPage(1);
-                        }}
-                      >
-                        <div className="flex items-center justify-center gap-1">
-                          Score
-                          {scorecardSortColumn === 'overallScore' ? (scorecardSortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}
-                        </div>
-                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -1454,11 +1480,6 @@ export default function Dashboard() {
                         </TableCell>
                         <TableCell className="text-right text-muted-foreground">
                           {formatCurrency(payor.writeOffAmount)}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <Badge className={cn("font-bold", getScoreColor(payor.overallScore))}>
-                            {payor.overallScore}
-                          </Badge>
                         </TableCell>
                       </TableRow>
                     ))}
