@@ -9,6 +9,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTr
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { 
   ArrowUpRight, 
@@ -41,7 +42,7 @@ import {
   XAxis, 
   YAxis, 
   CartesianGrid, 
-  Tooltip, 
+  Tooltip as RechartsTooltip, 
   ResponsiveContainer,
   LineChart,
   Line,
@@ -1033,7 +1034,7 @@ export default function Dashboard() {
                         tick={{ fontSize: 11 }}
                         width={35}
                       />
-                      <Tooltip 
+                      <RechartsTooltip 
                         contentStyle={{ backgroundColor: 'hsl(var(--card))', borderRadius: '8px', border: '1px solid hsl(var(--border))' }}
                         formatter={(value: number, name: string) => [formatCurrency(value), 'Variance Amount']}
                         labelFormatter={(label) => {
@@ -1144,7 +1145,7 @@ export default function Dashboard() {
                       ))}
                     </Pie>
                   )}
-                  <Tooltip 
+                  <RechartsTooltip 
                     contentStyle={{ backgroundColor: 'hsl(var(--card))', borderRadius: '8px', border: '1px solid hsl(var(--border))' }}
                     formatter={(value: number, name: string, props: any) => [
                       `${formatCurrency(value)} (${props.payload.count.toLocaleString()} variances)`,
@@ -1290,6 +1291,7 @@ export default function Dashboard() {
                 </Select>
               </div>
               <ScrollArea className="h-[400px]">
+                <TooltipProvider>
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -1323,10 +1325,15 @@ export default function Dashboard() {
                           setScorecardPage(1);
                         }}
                       >
-                        <div className="flex items-center justify-end gap-1">
-                          Variances
-                          {scorecardSortColumn === 'varianceCount' ? (scorecardSortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}
-                        </div>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className="flex items-center justify-end gap-1">
+                              Variances
+                              {scorecardSortColumn === 'varianceCount' ? (scorecardSortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent><p>Total number of payment variances identified for this payor</p></TooltipContent>
+                        </Tooltip>
                       </TableHead>
                       <TableHead 
                         className="text-center w-[90px] cursor-pointer hover:bg-muted/50"
@@ -1340,10 +1347,15 @@ export default function Dashboard() {
                           setScorecardPage(1);
                         }}
                       >
-                        <div className="flex items-center justify-center gap-1">
-                          Denial %
-                          {scorecardSortColumn === 'denialRate' ? (scorecardSortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}
-                        </div>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className="flex items-center justify-center gap-1">
+                              Denial %
+                              {scorecardSortColumn === 'denialRate' ? (scorecardSortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent><p>% of variances from Authorization Issues, Medical Necessity, or Coding Errors. Lower is better (&lt;5% target)</p></TooltipContent>
+                        </Tooltip>
                       </TableHead>
                       <TableHead 
                         className="text-center w-[90px] cursor-pointer hover:bg-muted/50"
@@ -1357,10 +1369,15 @@ export default function Dashboard() {
                           setScorecardPage(1);
                         }}
                       >
-                        <div className="flex items-center justify-center gap-1">
-                          Net Coll %
-                          {scorecardSortColumn === 'netCollectionRate' ? (scorecardSortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}
-                        </div>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className="flex items-center justify-center gap-1">
+                              Net Coll %
+                              {scorecardSortColumn === 'netCollectionRate' ? (scorecardSortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent><p>(Billed - Variance) / Billed. Higher is better (&gt;96% target)</p></TooltipContent>
+                        </Tooltip>
                       </TableHead>
                       <TableHead 
                         className="text-center w-[80px] cursor-pointer hover:bg-muted/50"
@@ -1374,10 +1391,15 @@ export default function Dashboard() {
                           setScorecardPage(1);
                         }}
                       >
-                        <div className="flex items-center justify-center gap-1">
-                          Days A/R
-                          {scorecardSortColumn === 'daysInAR' ? (scorecardSortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}
-                        </div>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className="flex items-center justify-center gap-1">
+                              Days A/R
+                              {scorecardSortColumn === 'daysInAR' ? (scorecardSortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent><p>Average aging days for open variances. Lower is better (&lt;40 days target)</p></TooltipContent>
+                        </Tooltip>
                       </TableHead>
                       <TableHead 
                         className="text-center w-[90px] cursor-pointer hover:bg-muted/50"
@@ -1391,10 +1413,15 @@ export default function Dashboard() {
                           setScorecardPage(1);
                         }}
                       >
-                        <div className="flex items-center justify-center gap-1">
-                          Clean %
-                          {scorecardSortColumn === 'cleanClaimRate' ? (scorecardSortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}
-                        </div>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className="flex items-center justify-center gap-1">
+                              Clean %
+                              {scorecardSortColumn === 'cleanClaimRate' ? (scorecardSortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent><p>% of variances resolved within 180 days. Higher is better (&gt;95% target)</p></TooltipContent>
+                        </Tooltip>
                       </TableHead>
                       <TableHead 
                         className="text-center w-[90px] cursor-pointer hover:bg-muted/50"
@@ -1408,10 +1435,15 @@ export default function Dashboard() {
                           setScorecardPage(1);
                         }}
                       >
-                        <div className="flex items-center justify-center gap-1">
-                          Contract %
-                          {scorecardSortColumn === 'contractCompliance' ? (scorecardSortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}
-                        </div>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className="flex items-center justify-center gap-1">
+                              Contract %
+                              {scorecardSortColumn === 'contractCompliance' ? (scorecardSortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent><p>100% minus contractual dispute rate. Higher is better (&gt;98% target)</p></TooltipContent>
+                        </Tooltip>
                       </TableHead>
                       <TableHead 
                         className="text-right w-[100px] cursor-pointer hover:bg-muted/50"
@@ -1425,10 +1457,15 @@ export default function Dashboard() {
                           setScorecardPage(1);
                         }}
                       >
-                        <div className="flex items-center justify-end gap-1">
-                          Write-Offs
-                          {scorecardSortColumn === 'writeOffAmount' ? (scorecardSortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}
-                        </div>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className="flex items-center justify-end gap-1">
+                              Write-Offs
+                              {scorecardSortColumn === 'writeOffAmount' ? (scorecardSortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent><p>Total variance amount written off as uncollectable</p></TooltipContent>
+                        </Tooltip>
                       </TableHead>
                     </TableRow>
                   </TableHeader>
@@ -1485,6 +1522,7 @@ export default function Dashboard() {
                     ))}
                   </TableBody>
                 </Table>
+                </TooltipProvider>
               </ScrollArea>
               {scorecardTotalPages > 1 && (
                 <div className="flex items-center justify-center gap-2 mt-4">
@@ -1578,7 +1616,7 @@ export default function Dashboard() {
                         />
                       ))}
                     </Pie>
-                    <Tooltip 
+                    <RechartsTooltip 
                       contentStyle={{ backgroundColor: 'hsl(var(--card))', borderRadius: '8px', border: '1px solid hsl(var(--border))' }}
                       formatter={(value: number) => [formatCurrency(value), 'Variance']}
                     />
@@ -1619,7 +1657,7 @@ export default function Dashboard() {
                       tickFormatter={(v) => formatCurrency(v)}
                       width={60}
                     />
-                    <Tooltip 
+                    <RechartsTooltip 
                       contentStyle={{ backgroundColor: 'hsl(var(--card))', borderRadius: '8px', border: '1px solid hsl(var(--border))' }}
                       formatter={(value: number) => [formatCurrency(value), 'Amount']}
                     />
@@ -1660,7 +1698,7 @@ export default function Dashboard() {
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
                   <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={11} />
                   <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} />
-                  <Tooltip 
+                  <RechartsTooltip 
                     contentStyle={{ backgroundColor: 'hsl(var(--card))', borderRadius: '8px', border: '1px solid hsl(var(--border))' }}
                   />
                   <Legend />
