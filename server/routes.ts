@@ -313,18 +313,18 @@ Return JSON array with top 3 recommendations in this format:
         status: "processing",
       });
 
-      // Extract text from PDF using dynamic import
+      // Extract text from PDF using pdf-parse v2 class-based API
       let extractedText = "";
       try {
-        const pdfModule = await import("pdf-parse");
-        const PDFParse = pdfModule.PDFParse;
-        // Convert Buffer to Uint8Array as required by pdf-parse
-        const uint8Array = new Uint8Array(req.file.buffer);
-        const parser = new PDFParse(uint8Array);
-        await parser.load();
-        // Use getText() method which returns a TextResult object
-        const textResult = await parser.getText();
-        extractedText = textResult.text || "";
+        const { PDFParse } = await import("pdf-parse");
+        // Convert Node Buffer to ArrayBuffer for pdf-parse v2
+        const arrayBuffer = req.file.buffer.buffer.slice(
+          req.file.buffer.byteOffset,
+          req.file.buffer.byteOffset + req.file.buffer.byteLength
+        );
+        const parser = new PDFParse({ data: arrayBuffer });
+        const result = await parser.getText();
+        extractedText = result.text || "";
         console.log("PDF text extracted, length:", extractedText.length);
       } catch (pdfError) {
         console.error("PDF parsing error:", pdfError);
