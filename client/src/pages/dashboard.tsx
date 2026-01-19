@@ -209,6 +209,181 @@ const PRIORITY_RANK: Record<string, number> = {
   'Low': 2
 };
 
+interface PayorScorecard {
+  payorName: string;
+  payorType: string;
+  varianceCount: number;
+  denialRate: number;
+  netCollectionRate: number;
+  daysInAR: number;
+  cleanClaimRate: number;
+  contractCompliance: number;
+  overallScore: string;
+  writeOffAmount: number;
+  openVarianceCount: number;
+  totalVarianceAmount: number;
+}
+
+interface OrgMetrics {
+  denialRate: number;
+  netCollectionRate: number;
+  avgDaysInAR: number;
+  cleanClaimRate: number;
+  contractCompliance: number;
+}
+
+const AGING_MIDPOINTS: Record<string, number> = {
+  '0-30 days': 15,
+  '31-60 days': 45,
+  '61-90 days': 75,
+  '91-120 days': 105,
+  '121-180 days': 150,
+  '181-365 days': 273,
+  '365+ days': 400
+};
+
+const SCORECARD_THRESHOLDS = {
+  denialRate: { green: 5, yellow: 10 },
+  netCollectionRate: { green: 96, yellow: 93 },
+  daysInAR: { green: 40, yellow: 60 },
+  cleanClaimRate: { green: 95, yellow: 90 },
+  contractCompliance: { green: 98, yellow: 95 }
+};
+
+function getMetricColor(metric: keyof typeof SCORECARD_THRESHOLDS, value: number): string {
+  const t = SCORECARD_THRESHOLDS[metric];
+  if (metric === 'denialRate' || metric === 'daysInAR') {
+    if (value < t.green) return 'text-emerald-600 bg-emerald-50';
+    if (value < t.yellow) return 'text-amber-600 bg-amber-50';
+    return 'text-red-600 bg-red-50';
+  } else {
+    if (value > t.green) return 'text-emerald-600 bg-emerald-50';
+    if (value > t.yellow) return 'text-amber-600 bg-amber-50';
+    return 'text-red-600 bg-red-50';
+  }
+}
+
+function calculateOverallScore(denial: number, collection: number, ar: number, clean: number, compliance: number): string {
+  let greenCount = 0;
+  let redCount = 0;
+  
+  if (denial < 5) greenCount++; else if (denial > 10) redCount++;
+  if (collection > 96) greenCount++; else if (collection < 93) redCount++;
+  if (ar < 40) greenCount++; else if (ar > 60) redCount++;
+  if (clean > 95) greenCount++; else if (clean < 90) redCount++;
+  if (compliance > 98) greenCount++; else if (compliance < 95) redCount++;
+  
+  if (greenCount === 5) return 'A';
+  if (greenCount === 4) return 'B+';
+  if (greenCount === 3) return 'B';
+  if (greenCount === 2 && redCount === 0) return 'B-';
+  if (greenCount === 2) return 'C+';
+  if (greenCount === 1 && redCount <= 1) return 'C';
+  if (greenCount === 1) return 'C-';
+  if (redCount <= 2) return 'D';
+  return 'F';
+}
+
+function getScoreColor(score: string): string {
+  if (score.startsWith('A')) return 'text-emerald-600 bg-emerald-100';
+  if (score.startsWith('B')) return 'text-blue-600 bg-blue-100';
+  if (score.startsWith('C')) return 'text-amber-600 bg-amber-100';
+  return 'text-red-600 bg-red-100';
+}
+
+function calculateOrgMetrics(variances: VarianceRecord[]): OrgMetrics {
+  const totalVariances = variances.length;
+  if (totalVariances === 0) return { denialRate: 0, netCollectionRate: 0, avgDaysInAR: 0, cleanClaimRate: 0, contractCompliance: 0 };
+  
+  const denialRelated = variances.filter(v => 
+    ['Authorization Issues', 'Medical Necessity', 'Coding Errors'].includes(v.rootCauseCategory)
+  ).length;
+  
+  const openVariances = variances.filter(v => 
+    ['Open', 'In Progress', 'Under Appeal'].includes(v.status)
+  );
+  
+  const resolvedVariances = variances.filter(v => v.status === 'Resolved');
+  
+  const totalBilled = variances.reduce((sum, v) => sum + v.billedAmount, 0);
+  const totalVariance = variances.reduce((sum, v) => sum + v.varianceAmount, 0);
+  
+  const totalAgingDays = openVariances.reduce((sum, v) => sum + (AGING_MIDPOINTS[v.agingBucket] || v.agingDays), 0);
+  const avgDaysInAR = openVariances.length > 0 ? Math.round(totalAgingDays / openVariances.length) : 0;
+  
+  const cleanClaims = resolvedVariances.filter(v => 
+    !['181-365 days', '365+ days'].includes(v.agingBucket)
+  );
+  
+  const contractualVariances = variances.filter(v => v.rootCauseCategory === 'Contractual Disputes');
+  
+  return {
+    denialRate: (denialRelated / totalVariances) * 100,
+    netCollectionRate: totalBilled > 0 ? ((totalBilled - totalVariance) / totalBilled) * 100 : 0,
+    avgDaysInAR,
+    cleanClaimRate: (resolvedVariances.length / totalVariances) * 100,
+    contractCompliance: 100 - ((contractualVariances.length / totalVariances) * 100)
+  };
+}
+
+function calculatePayorScorecards(variances: VarianceRecord[]): PayorScorecard[] {
+  const payorGroups: Record<string, VarianceRecord[]> = {};
+  
+  variances.forEach(v => {
+    if (!payorGroups[v.payorName]) payorGroups[v.payorName] = [];
+    payorGroups[v.payorName].push(v);
+  });
+  
+  return Object.entries(payorGroups).map(([payorName, payorVariances]) => {
+    const payorType = payorVariances[0]?.payorType || 'Unknown';
+    const totalVariances = payorVariances.length;
+    
+    const denialVariances = payorVariances.filter(v => 
+      ['Authorization Issues', 'Medical Necessity', 'Coding Errors'].includes(v.rootCauseCategory)
+    );
+    const denialRate = (denialVariances.length / totalVariances) * 100;
+    
+    const totalBilled = payorVariances.reduce((sum, v) => sum + v.billedAmount, 0);
+    const totalVariance = payorVariances.reduce((sum, v) => sum + v.varianceAmount, 0);
+    const writtenOff = payorVariances.filter(v => v.status === 'Written Off');
+    const totalWriteOff = writtenOff.reduce((sum, v) => sum + v.varianceAmount, 0);
+    const netCollectionRate = totalBilled > 0 ? ((totalBilled - totalVariance) / totalBilled) * 100 : 0;
+    
+    const openVariances = payorVariances.filter(v => 
+      ['Open', 'In Progress', 'Under Appeal'].includes(v.status)
+    );
+    const totalAgingDays = openVariances.reduce((sum, v) => sum + (AGING_MIDPOINTS[v.agingBucket] || v.agingDays), 0);
+    const daysInAR = openVariances.length > 0 ? Math.round(totalAgingDays / openVariances.length) : 0;
+    
+    const resolvedVariances = payorVariances.filter(v => v.status === 'Resolved');
+    const cleanClaims = resolvedVariances.filter(v => 
+      !['181-365 days', '365+ days'].includes(v.agingBucket)
+    );
+    const cleanClaimRate = totalVariances > 0 ? (cleanClaims.length / totalVariances) * 100 : 0;
+    
+    const contractualVariances = payorVariances.filter(v => v.rootCauseCategory === 'Contractual Disputes');
+    const contractCompliance = 100 - ((contractualVariances.length / totalVariances) * 100);
+    
+    return {
+      payorName,
+      payorType,
+      varianceCount: totalVariances,
+      denialRate,
+      netCollectionRate,
+      daysInAR,
+      cleanClaimRate,
+      contractCompliance,
+      overallScore: calculateOverallScore(denialRate, netCollectionRate, daysInAR, cleanClaimRate, contractCompliance),
+      writeOffAmount: totalWriteOff,
+      openVarianceCount: openVariances.length,
+      totalVarianceAmount: totalVariance
+    };
+  }).sort((a, b) => {
+    const scoreOrder = ['A', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D', 'F'];
+    return scoreOrder.indexOf(a.overallScore) - scoreOrder.indexOf(b.overallScore);
+  });
+}
+
 function getEDIFormat(rootCauseCategory: string, rootCauseSubcategory: string): { format: string; description: string } {
   if (rootCauseCategory === 'Coding Errors' || rootCauseCategory === 'Claim Submission Errors') {
     return { format: '837', description: 'Corrected Claim Resubmission' };
@@ -380,6 +555,10 @@ export default function Dashboard() {
   const [showResubmissionDraft, setShowResubmissionDraft] = useState(false);
   const [sortColumn, setSortColumn] = useState<string>('varianceAmount');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  const [scorecardSortColumn, setScorecardSortColumn] = useState<string>('overallScore');
+  const [scorecardSortDirection, setScorecardSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [scorecardPageSize, setScorecardPageSize] = useState(10);
+  const [scorecardPage, setScorecardPage] = useState(1);
   
   const SCALE_FACTOR = 324;
   const WEEKLY_VARIANCES = 13696;
@@ -526,6 +705,40 @@ export default function Dashboard() {
     const start = (currentPage - 1) * pageSize;
     return sortedData.slice(start, start + pageSize);
   }, [sortedData, currentPage, pageSize]);
+  
+  const orgMetrics = useMemo(() => calculateOrgMetrics(allData), [allData]);
+  
+  const payorScorecards = useMemo(() => {
+    const scorecards = calculatePayorScorecards(allData);
+    const SCORE_ORDER = ['A', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D', 'F'];
+    
+    return [...scorecards].sort((a, b) => {
+      let aVal: any = a[scorecardSortColumn as keyof PayorScorecard];
+      let bVal: any = b[scorecardSortColumn as keyof PayorScorecard];
+      
+      if (scorecardSortColumn === 'overallScore') {
+        const aRank = SCORE_ORDER.indexOf(aVal as string);
+        const bRank = SCORE_ORDER.indexOf(bVal as string);
+        return scorecardSortDirection === 'asc' ? aRank - bRank : bRank - aRank;
+      }
+      
+      if (typeof aVal === 'string') {
+        aVal = aVal.toLowerCase();
+        bVal = bVal.toLowerCase();
+      }
+      
+      if (aVal < bVal) return scorecardSortDirection === 'asc' ? -1 : 1;
+      if (aVal > bVal) return scorecardSortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [allData, scorecardSortColumn, scorecardSortDirection]);
+  
+  const paginatedScorecards = useMemo(() => {
+    const start = (scorecardPage - 1) * scorecardPageSize;
+    return payorScorecards.slice(start, start + scorecardPageSize);
+  }, [payorScorecards, scorecardPage, scorecardPageSize]);
+  
+  const scorecardTotalPages = Math.ceil(payorScorecards.length / scorecardPageSize);
   
   const totalPages = Math.ceil(filteredData.length / pageSize);
   
@@ -952,6 +1165,332 @@ export default function Dashboard() {
                 </Button>
               </div>
             )}
+          </CardContent>
+        </Card>
+
+        {/* Payor Performance Scorecard */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5" />
+              Payor Performance Scorecard
+            </CardTitle>
+            <CardDescription>
+              Key performance metrics by payor calculated from variance data
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* Summary Metrics Cards */}
+            <div className="grid gap-4 md:grid-cols-5">
+              <Card className="bg-gradient-to-br from-slate-50 to-slate-100 border-slate-200">
+                <CardContent className="pt-4 pb-3">
+                  <div className="text-xs text-muted-foreground mb-1">Avg Denial Rate</div>
+                  <div className={cn("text-2xl font-bold", getMetricColor('denialRate', orgMetrics.denialRate).split(' ')[0])}>
+                    {orgMetrics.denialRate.toFixed(1)}%
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">Benchmark: &lt;5%</div>
+                </CardContent>
+              </Card>
+              <Card className="bg-gradient-to-br from-slate-50 to-slate-100 border-slate-200">
+                <CardContent className="pt-4 pb-3">
+                  <div className="text-xs text-muted-foreground mb-1">Net Collection Rate</div>
+                  <div className={cn("text-2xl font-bold", getMetricColor('netCollectionRate', orgMetrics.netCollectionRate).split(' ')[0])}>
+                    {orgMetrics.netCollectionRate.toFixed(1)}%
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">Benchmark: &gt;96%</div>
+                </CardContent>
+              </Card>
+              <Card className="bg-gradient-to-br from-slate-50 to-slate-100 border-slate-200">
+                <CardContent className="pt-4 pb-3">
+                  <div className="text-xs text-muted-foreground mb-1">Avg Days in A/R</div>
+                  <div className={cn("text-2xl font-bold", getMetricColor('daysInAR', orgMetrics.avgDaysInAR).split(' ')[0])}>
+                    {orgMetrics.avgDaysInAR}
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">Benchmark: &lt;40 days</div>
+                </CardContent>
+              </Card>
+              <Card className="bg-gradient-to-br from-slate-50 to-slate-100 border-slate-200">
+                <CardContent className="pt-4 pb-3">
+                  <div className="text-xs text-muted-foreground mb-1">Clean Claim Rate</div>
+                  <div className={cn("text-2xl font-bold", getMetricColor('cleanClaimRate', orgMetrics.cleanClaimRate).split(' ')[0])}>
+                    {orgMetrics.cleanClaimRate.toFixed(1)}%
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">Benchmark: &gt;95%</div>
+                </CardContent>
+              </Card>
+              <Card className="bg-gradient-to-br from-slate-50 to-slate-100 border-slate-200">
+                <CardContent className="pt-4 pb-3">
+                  <div className="text-xs text-muted-foreground mb-1">Contract Compliance</div>
+                  <div className={cn("text-2xl font-bold", getMetricColor('contractCompliance', orgMetrics.contractCompliance).split(' ')[0])}>
+                    {orgMetrics.contractCompliance.toFixed(1)}%
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">Benchmark: &gt;98%</div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Payor Scorecard Table */}
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <div className="text-sm text-muted-foreground">
+                  {payorScorecards.length} payors • Page {scorecardPage} of {scorecardTotalPages}
+                </div>
+                <Select value={String(scorecardPageSize)} onValueChange={(v) => { setScorecardPageSize(Number(v)); setScorecardPage(1); }}>
+                  <SelectTrigger className="w-[100px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white">
+                    <SelectItem value="10">10 rows</SelectItem>
+                    <SelectItem value="25">25 rows</SelectItem>
+                    <SelectItem value="50">50 rows</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <ScrollArea className="h-[400px]">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead 
+                        className="cursor-pointer hover:bg-muted/50"
+                        onClick={() => {
+                          if (scorecardSortColumn === 'payorName') {
+                            setScorecardSortDirection(d => d === 'asc' ? 'desc' : 'asc');
+                          } else {
+                            setScorecardSortColumn('payorName');
+                            setScorecardSortDirection('asc');
+                          }
+                          setScorecardPage(1);
+                        }}
+                      >
+                        <div className="flex items-center gap-1">
+                          Payor
+                          {scorecardSortColumn === 'payorName' ? (scorecardSortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}
+                        </div>
+                      </TableHead>
+                      <TableHead className="w-[80px]">Type</TableHead>
+                      <TableHead 
+                        className="text-right w-[80px] cursor-pointer hover:bg-muted/50"
+                        onClick={() => {
+                          if (scorecardSortColumn === 'varianceCount') {
+                            setScorecardSortDirection(d => d === 'asc' ? 'desc' : 'asc');
+                          } else {
+                            setScorecardSortColumn('varianceCount');
+                            setScorecardSortDirection('desc');
+                          }
+                          setScorecardPage(1);
+                        }}
+                      >
+                        <div className="flex items-center justify-end gap-1">
+                          Variances
+                          {scorecardSortColumn === 'varianceCount' ? (scorecardSortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}
+                        </div>
+                      </TableHead>
+                      <TableHead 
+                        className="text-center w-[90px] cursor-pointer hover:bg-muted/50"
+                        onClick={() => {
+                          if (scorecardSortColumn === 'denialRate') {
+                            setScorecardSortDirection(d => d === 'asc' ? 'desc' : 'asc');
+                          } else {
+                            setScorecardSortColumn('denialRate');
+                            setScorecardSortDirection('asc');
+                          }
+                          setScorecardPage(1);
+                        }}
+                      >
+                        <div className="flex items-center justify-center gap-1">
+                          Denial %
+                          {scorecardSortColumn === 'denialRate' ? (scorecardSortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}
+                        </div>
+                      </TableHead>
+                      <TableHead 
+                        className="text-center w-[90px] cursor-pointer hover:bg-muted/50"
+                        onClick={() => {
+                          if (scorecardSortColumn === 'netCollectionRate') {
+                            setScorecardSortDirection(d => d === 'asc' ? 'desc' : 'asc');
+                          } else {
+                            setScorecardSortColumn('netCollectionRate');
+                            setScorecardSortDirection('desc');
+                          }
+                          setScorecardPage(1);
+                        }}
+                      >
+                        <div className="flex items-center justify-center gap-1">
+                          Net Coll %
+                          {scorecardSortColumn === 'netCollectionRate' ? (scorecardSortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}
+                        </div>
+                      </TableHead>
+                      <TableHead 
+                        className="text-center w-[80px] cursor-pointer hover:bg-muted/50"
+                        onClick={() => {
+                          if (scorecardSortColumn === 'daysInAR') {
+                            setScorecardSortDirection(d => d === 'asc' ? 'desc' : 'asc');
+                          } else {
+                            setScorecardSortColumn('daysInAR');
+                            setScorecardSortDirection('asc');
+                          }
+                          setScorecardPage(1);
+                        }}
+                      >
+                        <div className="flex items-center justify-center gap-1">
+                          Days A/R
+                          {scorecardSortColumn === 'daysInAR' ? (scorecardSortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}
+                        </div>
+                      </TableHead>
+                      <TableHead 
+                        className="text-center w-[90px] cursor-pointer hover:bg-muted/50"
+                        onClick={() => {
+                          if (scorecardSortColumn === 'cleanClaimRate') {
+                            setScorecardSortDirection(d => d === 'asc' ? 'desc' : 'asc');
+                          } else {
+                            setScorecardSortColumn('cleanClaimRate');
+                            setScorecardSortDirection('desc');
+                          }
+                          setScorecardPage(1);
+                        }}
+                      >
+                        <div className="flex items-center justify-center gap-1">
+                          Clean %
+                          {scorecardSortColumn === 'cleanClaimRate' ? (scorecardSortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}
+                        </div>
+                      </TableHead>
+                      <TableHead 
+                        className="text-center w-[90px] cursor-pointer hover:bg-muted/50"
+                        onClick={() => {
+                          if (scorecardSortColumn === 'contractCompliance') {
+                            setScorecardSortDirection(d => d === 'asc' ? 'desc' : 'asc');
+                          } else {
+                            setScorecardSortColumn('contractCompliance');
+                            setScorecardSortDirection('desc');
+                          }
+                          setScorecardPage(1);
+                        }}
+                      >
+                        <div className="flex items-center justify-center gap-1">
+                          Contract %
+                          {scorecardSortColumn === 'contractCompliance' ? (scorecardSortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}
+                        </div>
+                      </TableHead>
+                      <TableHead 
+                        className="text-right w-[100px] cursor-pointer hover:bg-muted/50"
+                        onClick={() => {
+                          if (scorecardSortColumn === 'writeOffAmount') {
+                            setScorecardSortDirection(d => d === 'asc' ? 'desc' : 'asc');
+                          } else {
+                            setScorecardSortColumn('writeOffAmount');
+                            setScorecardSortDirection('desc');
+                          }
+                          setScorecardPage(1);
+                        }}
+                      >
+                        <div className="flex items-center justify-end gap-1">
+                          Write-Offs
+                          {scorecardSortColumn === 'writeOffAmount' ? (scorecardSortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}
+                        </div>
+                      </TableHead>
+                      <TableHead 
+                        className="text-center w-[70px] cursor-pointer hover:bg-muted/50"
+                        onClick={() => {
+                          if (scorecardSortColumn === 'overallScore') {
+                            setScorecardSortDirection(d => d === 'asc' ? 'desc' : 'asc');
+                          } else {
+                            setScorecardSortColumn('overallScore');
+                            setScorecardSortDirection('asc');
+                          }
+                          setScorecardPage(1);
+                        }}
+                      >
+                        <div className="flex items-center justify-center gap-1">
+                          Score
+                          {scorecardSortColumn === 'overallScore' ? (scorecardSortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}
+                        </div>
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {paginatedScorecards.map((payor) => (
+                      <TableRow 
+                        key={payor.payorName}
+                        className="cursor-pointer hover:bg-muted/50"
+                        onClick={() => {
+                          setSelectedPayorType("all");
+                          setSearchQuery(payor.payorName);
+                          setCurrentPage(1);
+                        }}
+                        data-testid={`scorecard-row-${payor.payorName.replace(/\s+/g, '-').toLowerCase()}`}
+                      >
+                        <TableCell className="font-medium max-w-[200px] truncate" title={payor.payorName}>
+                          {payor.payorName}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="text-xs whitespace-nowrap">
+                            {payor.payorType.replace('Commercial ', '').replace('Medicare ', 'MA-').substring(0, 12)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">{payor.varianceCount}</TableCell>
+                        <TableCell className="text-center">
+                          <span className={cn("px-2 py-0.5 rounded text-xs font-medium", getMetricColor('denialRate', payor.denialRate))}>
+                            {payor.denialRate.toFixed(1)}%
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <span className={cn("px-2 py-0.5 rounded text-xs font-medium", getMetricColor('netCollectionRate', payor.netCollectionRate))}>
+                            {payor.netCollectionRate.toFixed(1)}%
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <span className={cn("px-2 py-0.5 rounded text-xs font-medium", getMetricColor('daysInAR', payor.daysInAR))}>
+                            {payor.daysInAR}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <span className={cn("px-2 py-0.5 rounded text-xs font-medium", getMetricColor('cleanClaimRate', payor.cleanClaimRate))}>
+                            {payor.cleanClaimRate.toFixed(1)}%
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <span className={cn("px-2 py-0.5 rounded text-xs font-medium", getMetricColor('contractCompliance', payor.contractCompliance))}>
+                            {payor.contractCompliance.toFixed(1)}%
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right text-muted-foreground">
+                          {formatCurrency(payor.writeOffAmount)}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Badge className={cn("font-bold", getScoreColor(payor.overallScore))}>
+                            {payor.overallScore}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </ScrollArea>
+              {scorecardTotalPages > 1 && (
+                <div className="flex items-center justify-center gap-2 mt-4">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setScorecardPage(p => Math.max(1, p - 1))}
+                    disabled={scorecardPage === 1}
+                    data-testid="scorecard-prev-page"
+                  >
+                    Previous
+                  </Button>
+                  <span className="text-sm text-muted-foreground">
+                    Page {scorecardPage} of {scorecardTotalPages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setScorecardPage(p => Math.min(scorecardTotalPages, p + 1))}
+                    disabled={scorecardPage === scorecardTotalPages}
+                    data-testid="scorecard-next-page"
+                  >
+                    Next
+                  </Button>
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
 
