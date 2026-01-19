@@ -1,0 +1,511 @@
+Add a new Payor Performance Scorecard section to the existing dashboard. This section calculates and displays payor performance metrics using the existing variance, write-off, and payor data already in the application. Use the parent app's visual guidelines and existing component styles.
+
+Payor Performance Scorecard Requirements
+1. Data Source Mapping
+Use existing data to calculate metrics. Do NOT create duplicate payor or claims data.
+EXISTING DATA → METRIC CALCULATION:
+
+Variance Records (2,250 existing records):
+├── Status = "Open" or "In Progress" → Used for A/R calculations
+├── Status = "Resolved" → Used for collection rate calculations
+├── Status = "Written Off" → Used for write-off rate calculations
+├── Variance Amount → Used for underpayment detection
+├── Aging Bucket → Used for Days in A/R
+├── Root Cause = "Authorization Issues" or denial-related → Denial rate proxy
+└── Payor Name/Type → Group by payor
+
+Write-Off Records (850 existing records):
+├── Write-Off Amount → Contract compliance issues
+├── Write-Off Cause → Denial vs collection issues
+├── Days to Write-Off → A/R aging indicator
+└── Payor Name → Group by payor
+
+Payor Records (75 existing records):
+├── Payor Name → Primary key
+├── Payor Type → Grouping
+└── State/Region → Geographic analysis
+
+DERIVED METRICS FROM EXISTING DATA:
+
+1. Denial Rate = 
+   (Variances with Root Cause in ['Authorization Issues', 'Medical Necessity', 'Coding Errors'] 
+   ÷ Total Variances per Payor) × 100
+
+2. Net Collection Rate = 
+   ((Total Billed - Total Variance Amount - Write-Offs) ÷ Total Billed) × 100
+   
+3. Days in A/R = 
+   Weighted average of Aging Bucket midpoints for open variances
+   
+4. Clean Claim Rate = 
+   (Variances Resolved without rework ÷ Total Variances) × 100
+   OR 100% - Denial Rate - Rework Rate
+   
+5. Contract Compliance Rate = 
+   ((Total Expected - Underpayment Variances) ÷ Total Expected) × 100
+   Use variances with Root Cause = 'Contractual Disputes'
+
+2. Summary Cards (Top Row)
+Calculate organization-wide averages from existing data:
+javascript// Calculate from existing variance and write-off data
+const calculateOrgMetrics = (variances, writeOffs) => {
+  const totalVariances = variances.length;
+  const denialRelated = variances.filter(v => 
+    ['Authorization Issues', 'Medical Necessity', 'Coding Errors'].includes(v.rootCause)
+  ).length;
+  
+  const openVariances = variances.filter(v => 
+    ['Open', 'In Progress', 'Under Appeal'].includes(v.status)
+  );
+  
+  const resolvedVariances = variances.filter(v => v.status === 'Resolved');
+  const writtenOffVariances = variances.filter(v => v.status === 'Written Off');
+  
+  return {
+    denialRate: (denialRelated / totalVariances * 100).toFixed(1),
+    netCollectionRate: calculateCollectionRate(variances, writeOffs),
+    avgDaysInAR: calculateAvgAging(openVariances),
+    cleanClaimRate: (resolvedVariances.length / totalVariances * 100).toFixed(1),
+    contractCompliance: calculateContractCompliance(variances)
+  };
+};
+CardMetricCalculation SourceBenchmarkAvg Denial Rate% denial-related variancesExisting variances by root cause< 5%Net Collection Rate% collected vs expectedExisting variance amounts96-99%Avg Days in A/RWeighted avg agingExisting aging buckets30-40 daysClean Claim Rate% resolved without issuesExisting status field> 95%Contract Compliance% without underpaymentExisting contractual variances> 98%
+
+3. Payor Scorecard Table
+Aggregate existing variance data by payor:
+javascript// Group existing data by payor
+const calculatePayorMetrics = (variances, writeOffs, payors) => {
+  return payors.map(payor => {
+    const payorVariances = variances.filter(v => v.payorName === payor.payorName);
+    const payorWriteOffs = writeOffs.filter(w => w.payorName === payor.payorName);
+    
+    // Denial Rate: Authorization + Medical Necessity + Coding variances
+    const denialVariances = payorVariances.filter(v => 
+      ['Authorization Issues', 'Medical Necessity', 'Coding Errors'].includes(v.rootCause)
+    );
+    const denialRate = (denialVariances.length / payorVariances.length * 100) || 0;
+    
+    // Net Collection Rate
+    const totalBilled = payorVariances.reduce((sum, v) => sum + v.billedAmount, 0);
+    const totalVariance = payorVariances.reduce((sum, v) => sum + v.varianceAmount, 0);
+    const totalWriteOff = payorWriteOffs.reduce((sum, w) => sum + w.writeOffAmount, 0);
+    const netCollectionRate = ((totalBilled - totalVariance - totalWriteOff) / totalBilled * 100) || 0;
+    
+    // Days in A/R: Use aging bucket midpoints
+    const agingMidpoints = {
+      '0-30 days': 15,
+      '31-60 days': 45,
+      '61-90 days': 75,
+      '91-120 days': 105,
+      '121-180 days': 150,
+      '181-365 days': 273,
+      '365+ days': 400
+    };
+    const openVariances = payorVariances.filter(v => 
+      ['Open', 'In Progress', 'Under Appeal'].includes(v.status)
+    );
+    const totalAgingDays = openVariances.reduce((sum, v) => 
+      sum + (agingMidpoints[v.agingBucket] || 0), 0
+    );
+    const daysInAR = openVariances.length > 0 
+      ? Math.round(totalAgingDays / openVariances.length) 
+      : 0;
+    
+    // Clean Claim Rate: Resolved without write-off or extended aging
+    const cleanClaims = payorVariances.filter(v => 
+      v.status === 'Resolved' && 
+      !['181-365 days', '365+ days'].includes(v.agingBucket)
+    );
+    const cleanClaimRate = (cleanClaims.length / payorVariances.length * 100) || 0;
+    
+    // Contract Compliance: Inverse of contractual dispute rate
+    const contractualVariances = payorVariances.filter(v => 
+      v.rootCause === 'Contractual Disputes'
+    );
+    const contractCompliance = 100 - (contractualVariances.length / payorVariances.length * 100) || 100;
+    
+    return {
+      payorName: payor.payorName,
+      payorType: payor.payorType,
+      denialRate: denialRate.toFixed(1),
+      netCollectionRate: netCollectionRate.toFixed(1),
+      daysInAR: daysInAR,
+      cleanClaimRate: cleanClaimRate.toFixed(1),
+      contractCompliance: contractCompliance.toFixed(1),
+      overallScore: calculateOverallScore(denialRate, netCollectionRate, daysInAR, cleanClaimRate, contractCompliance),
+      // Additional context from existing data
+      varianceCount: payorVariances.length,
+      writeOffCount: payorWriteOffs.length,
+      totalVarianceAmount: totalVariance,
+      totalWriteOffAmount: totalWriteOff,
+      openVarianceCount: openVariances.length
+    };
+  });
+};
+Table Columns (using calculated data):
+ColumnSourceFormatPayor NameExisting payor dataText + Type BadgePayor TypeExisting payor dataColor-coded badgeVariance CountCount from existing variancesNumberDenial RateCalculated from root cause% with status colorNet Collection RateCalculated from amounts% with status colorDays in A/RCalculated from aging bucketsNumber with status colorClean Claim RateCalculated from status% with status colorContract ComplianceCalculated from contractual variances% with status colorWrite-Off AmountSum from existing write-offsCurrencyOverall ScoreCalculated from 5 metricsLetter grade badgeActionsLinks to filtered viewsButtons
+
+4. Color Coding Thresholds
+javascriptconst getStatusColor = (metric, value) => {
+  const thresholds = {
+    denialRate: { green: 5, yellow: 10 },        // < 5% green, 5-10% yellow, > 10% red
+    netCollectionRate: { green: 96, yellow: 93 }, // > 96% green, 93-96% yellow, < 93% red
+    daysInAR: { green: 40, yellow: 60 },          // < 40 green, 40-60 yellow, > 60 red
+    cleanClaimRate: { green: 95, yellow: 90 },    // > 95% green, 90-95% yellow, < 90% red
+    contractCompliance: { green: 98, yellow: 95 } // > 98% green, 95-98% yellow, < 95% red
+  };
+  
+  const t = thresholds[metric];
+  if (metric === 'denialRate' || metric === 'daysInAR') {
+    // Lower is better
+    if (value < t.green) return 'green';
+    if (value < t.yellow) return 'yellow';
+    return 'red';
+  } else {
+    // Higher is better
+    if (value > t.green) return 'green';
+    if (value > t.yellow) return 'yellow';
+    return 'red';
+  }
+};
+
+const calculateOverallScore = (denial, collection, ar, clean, compliance) => {
+  let greenCount = 0;
+  let redCount = 0;
+  
+  if (denial < 5) greenCount++; else if (denial > 10) redCount++;
+  if (collection > 96) greenCount++; else if (collection < 93) redCount++;
+  if (ar < 40) greenCount++; else if (ar > 60) redCount++;
+  if (clean > 95) greenCount++; else if (clean < 90) redCount++;
+  if (compliance > 98) greenCount++; else if (compliance < 95) redCount++;
+  
+  if (greenCount === 5) return 'A';
+  if (greenCount === 4) return 'B+';
+  if (greenCount === 3) return 'B';
+  if (greenCount === 2 && redCount === 0) return 'B-';
+  if (greenCount === 2) return 'C+';
+  if (greenCount === 1 && redCount <= 1) return 'C';
+  if (greenCount === 1) return 'C-';
+  if (redCount <= 2) return 'D';
+  return 'F';
+};
+
+5. Drill-Down Using Existing Data
+When clicking on a metric cell, filter and display existing records:
+javascript// Denial Rate Drill-Down
+const getDenialDrillDown = (payorName, variances) => {
+  const payorVariances = variances.filter(v => v.payorName === payorName);
+  const denialVariances = payorVariances.filter(v => 
+    ['Authorization Issues', 'Medical Necessity', 'Coding Errors'].includes(v.rootCause)
+  );
+  
+  // Group by root cause subcategory (use existing data)
+  const bySubCategory = denialVariances.reduce((acc, v) => {
+    const key = v.rootCauseSubCategory || v.rootCause;
+    if (!acc[key]) acc[key] = { count: 0, amount: 0 };
+    acc[key].count++;
+    acc[key].amount += v.varianceAmount;
+    return acc;
+  }, {});
+  
+  return {
+    totalDenials: denialVariances.length,
+    totalAmount: denialVariances.reduce((sum, v) => sum + v.varianceAmount, 0),
+    byReason: bySubCategory,
+    recentDenials: denialVariances.slice(0, 10) // Show recent records
+  };
+};
+
+// A/R Drill-Down
+const getARDrillDown = (payorName, variances) => {
+  const openVariances = variances.filter(v => 
+    v.payorName === payorName && 
+    ['Open', 'In Progress', 'Under Appeal'].includes(v.status)
+  );
+  
+  // Group by existing aging bucket
+  const byAgingBucket = openVariances.reduce((acc, v) => {
+    if (!acc[v.agingBucket]) acc[v.agingBucket] = { count: 0, amount: 0 };
+    acc[v.agingBucket].count++;
+    acc[v.agingBucket].amount += v.varianceAmount;
+    return acc;
+  }, {});
+  
+  return {
+    totalOpen: openVariances.length,
+    totalAmount: openVariances.reduce((sum, v) => sum + v.varianceAmount, 0),
+    byAgingBucket: byAgingBucket,
+    oldestVariances: openVariances
+      .sort((a, b) => new Date(a.varianceIdentifiedDate) - new Date(b.varianceIdentifiedDate))
+      .slice(0, 10)
+  };
+};
+
+// Contract Compliance Drill-Down
+const getComplianceDrillDown = (payorName, variances) => {
+  const contractualVariances = variances.filter(v => 
+    v.payorName === payorName && 
+    v.rootCause === 'Contractual Disputes'
+  );
+  
+  // Group by subcategory (use existing data)
+  const bySubCategory = contractualVariances.reduce((acc, v) => {
+    const key = v.rootCauseSubCategory || 'Rate discrepancy';
+    if (!acc[key]) acc[key] = { count: 0, amount: 0 };
+    acc[key].count++;
+    acc[key].amount += v.varianceAmount;
+    return acc;
+  }, {});
+  
+  return {
+    totalUnderpayments: contractualVariances.length,
+    totalAmount: contractualVariances.reduce((sum, v) => sum + v.varianceAmount, 0),
+    byReason: bySubCategory,
+    recoveryOpportunity: contractualVariances
+      .filter(v => v.status !== 'Written Off')
+      .reduce((sum, v) => sum + v.varianceAmount, 0)
+  };
+};
+
+6. Integration with Existing Dashboard
+Link scorecard to existing variance views:
+javascript// When clicking payor row, filter existing variance table
+const handlePayorClick = (payorName) => {
+  // Use existing filter mechanism from variance dashboard
+  setFilters({
+    ...currentFilters,
+    payorName: payorName
+  });
+  // Navigate to or scroll to variance detail table
+  scrollToVarianceTable();
+};
+
+// When clicking metric cell, filter by relevant criteria
+const handleMetricClick = (payorName, metric) => {
+  const filterMap = {
+    denialRate: {
+      payorName: payorName,
+      rootCause: ['Authorization Issues', 'Medical Necessity', 'Coding Errors']
+    },
+    netCollectionRate: {
+      payorName: payorName,
+      status: ['Resolved', 'Written Off']
+    },
+    daysInAR: {
+      payorName: payorName,
+      status: ['Open', 'In Progress', 'Under Appeal']
+    },
+    cleanClaimRate: {
+      payorName: payorName,
+      status: ['Resolved']
+    },
+    contractCompliance: {
+      payorName: payorName,
+      rootCause: ['Contractual Disputes']
+    }
+  };
+  
+  setFilters(filterMap[metric]);
+  scrollToVarianceTable();
+};
+
+// Link to write-off analysis
+const handleWriteOffClick = (payorName) => {
+  // Navigate to write-off trend section with payor filter
+  setWriteOffFilters({ payorName: payorName });
+  scrollToWriteOffSection();
+};
+```
+
+---
+
+### 7. Summary Cards UI
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                     PAYOR PERFORMANCE OVERVIEW                              │
+├─────────────┬─────────────┬─────────────┬─────────────┬─────────────────────┤
+│ AVG DENIAL  │ NET         │ AVG DAYS    │ CLEAN CLAIM │ CONTRACT            │
+│ RATE        │ COLLECTION  │ IN A/R      │ RATE        │ COMPLIANCE          │
+│             │ RATE        │             │             │                     │
+│   8.4%      │   94.6%     │   42 days   │   91.2%     │   96.8%             │
+│   ⚠️ +1.2%  │   ⚠️ -0.8%  │   ⚠️ +3     │   ⚠️ -1.5%  │   ⚠️ -0.4%          │
+│             │             │             │             │                     │
+│ Benchmark:  │ Benchmark:  │ Benchmark:  │ Benchmark:  │ Benchmark:          │
+│ < 5%        │ 96-99%      │ 30-40 days  │ > 95%       │ > 98%               │
+└─────────────┴─────────────┴─────────────┴─────────────┴─────────────────────┘
+
+Calculated from: 2,250 variance records across 75 payors
+
+8. Payor Detail Modal (Using Existing Data)
+javascriptconst PayorDetailModal = ({ payorName, variances, writeOffs }) => {
+  const payorVariances = variances.filter(v => v.payorName === payorName);
+  const payorWriteOffs = writeOffs.filter(w => w.payorName === payorName);
+  
+  // Calculate all metrics from existing data
+  const metrics = calculatePayorMetrics(payorVariances, payorWriteOffs);
+  
+  // Get variance breakdown by status (from existing data)
+  const byStatus = payorVariances.reduce((acc, v) => {
+    acc[v.status] = (acc[v.status] || 0) + 1;
+    return acc;
+  }, {});
+  
+  // Get variance breakdown by root cause (from existing data)
+  const byRootCause = payorVariances.reduce((acc, v) => {
+    acc[v.rootCause] = (acc[v.rootCause] || 0) + 1;
+    return acc;
+  }, {});
+  
+  return (
+    <Modal>
+      <Header>
+        <PayorName>{payorName}</PayorName>
+        <PayorTypeBadge>{metrics.payorType}</PayorTypeBadge>
+        <OverallScore>{metrics.overallScore}</OverallScore>
+      </Header>
+      
+      <MetricsGrid>
+        {/* Display 5 metrics with benchmarks */}
+      </MetricsGrid>
+      
+      <VarianceBreakdown>
+        <ByStatus data={byStatus} />
+        <ByRootCause data={byRootCause} />
+        <ByAgingBucket data={getAgingBreakdown(payorVariances)} />
+      </VarianceBreakdown>
+      
+      <RecentVariances>
+        {/* List recent variances from existing data */}
+        {payorVariances.slice(0, 10).map(v => <VarianceRow key={v.id} {...v} />)}
+      </RecentVariances>
+      
+      <Actions>
+        <Button onClick={() => filterVarianceTable(payorName)}>
+          View All {payorVariances.length} Variances
+        </Button>
+        <Button onClick={() => filterWriteOffTable(payorName)}>
+          View {payorWriteOffs.length} Write-Offs
+        </Button>
+        <Button onClick={() => exportPayorReport(payorName)}>
+          Export Report
+        </Button>
+      </Actions>
+    </Modal>
+  );
+};
+
+9. Alerts Panel (Calculated from Existing Data)
+javascriptconst generateAlerts = (variances, writeOffs, payors) => {
+  const alerts = [];
+  
+  // Check each payor's metrics against thresholds
+  payors.forEach(payor => {
+    const metrics = calculatePayorMetrics(
+      variances.filter(v => v.payorName === payor.payorName),
+      writeOffs.filter(w => w.payorName === payor.payorName)
+    );
+    
+    // High denial rate alert
+    if (metrics.denialRate > 12) {
+      const denialCount = variances.filter(v => 
+        v.payorName === payor.payorName &&
+        ['Authorization Issues', 'Medical Necessity'].includes(v.rootCause) &&
+        v.status === 'Open'
+      ).length;
+      
+      alerts.push({
+        type: 'warning',
+        payor: payor.payorName,
+        message: `Denial rate at ${metrics.denialRate}% - ${denialCount} open denial variances`,
+        action: 'Review denial patterns'
+      });
+    }
+    
+    // High A/R alert
+    const oldARCount = variances.filter(v => 
+      v.payorName === payor.payorName &&
+      ['121-180 days', '181-365 days', '365+ days'].includes(v.agingBucket) &&
+      v.status !== 'Resolved' && v.status !== 'Written Off'
+    ).length;
+    
+    if (oldARCount > 20) {
+      alerts.push({
+        type: 'critical',
+        payor: payor.payorName,
+        message: `${oldARCount} variances over 120 days old`,
+        action: 'Prioritize aged receivables'
+      });
+    }
+    
+    // Underpayment opportunity alert
+    const underpaymentAmount = variances
+      .filter(v => 
+        v.payorName === payor.payorName &&
+        v.rootCause === 'Contractual Disputes' &&
+        v.status !== 'Written Off'
+      )
+      .reduce((sum, v) => sum + v.varianceAmount, 0);
+    
+    if (underpaymentAmount > 50000) {
+      alerts.push({
+        type: 'opportunity',
+        payor: payor.payorName,
+        message: `$${underpaymentAmount.toLocaleString()} in underpayment recovery opportunity`,
+        action: 'Initiate contract review'
+      });
+    }
+  });
+  
+  return alerts.sort((a, b) => {
+    const priority = { critical: 0, warning: 1, opportunity: 2 };
+    return priority[a.type] - priority[b.type];
+  });
+};
+```
+
+Display alerts:
+```
+⚠️ ATTENTION REQUIRED (from existing data):
+
+- UnitedHealthcare MA: Denial rate at 14.8% - 42 open denial variances
+  → [View Variances] [Filter by Auth Issues]
+  
+- Cigna: 28 variances over 120 days old ($187,450 at risk)
+  → [View Aged A/R] [Prioritize Queue]
+  
+- Humana MA: $78,200 in underpayment recovery opportunity
+  → [View Contractual Variances] [Generate Report]
+
+📊 CALCULATED FROM:
+   2,250 variance records | 850 write-off records | 75 payors
+
+10. Filter Synchronization
+Sync filters between scorecard and existing variance/write-off views:
+javascript// Shared filter state
+const [globalFilters, setGlobalFilters] = useState({
+  payorName: null,
+  payorType: null,
+  rootCause: null,
+  status: null,
+  agingBucket: null,
+  dateRange: { start: null, end: null }
+});
+
+// Apply to all data views
+const filteredVariances = useMemo(() => 
+  applyFilters(allVariances, globalFilters), 
+  [allVariances, globalFilters]
+);
+
+const filteredWriteOffs = useMemo(() => 
+  applyFilters(allWriteOffs, globalFilters), 
+  [allWriteOffs, globalFilters]
+);
+
+// Payor scorecard recalculates when filters change
+const payorMetrics = useMemo(() => 
+  calculateAllPayorMetrics(filteredVariances, filteredWriteOffs, payors),
+  [filteredVariances, filteredWriteOffs, payors]
+);
+
+End of Prompt
