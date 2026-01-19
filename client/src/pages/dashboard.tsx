@@ -176,17 +176,17 @@ const ROOT_CAUSE_EXPLANATIONS: Record<string, { title: string; bullets: string[]
 const PRIORITY_EXPLANATIONS: Record<string, { criteria: string[]; recommendation: string }> = {
   'High': {
     criteria: [
-      'Variance amount exceeds $500',
-      'Aging over 90 days (approaching timely filing limits)',
+      'Variance amount exceeds $1,000',
+      'OR aging over 120 days (approaching timely filing limits)',
       'High recovery potential based on root cause',
-      'Pattern indicates systemic issue'
+      'Requires immediate escalation to prevent revenue loss'
     ],
     recommendation: 'Prioritize immediate action. Escalate to supervisor if unresolved within 5 business days.'
   },
   'Medium': {
     criteria: [
-      'Variance amount between $100 and $500',
-      'Aging between 30-90 days',
+      'Variance amount between $500 and $1,000',
+      'OR aging between 60-120 days',
       'Moderate recovery potential',
       'Requires standard follow-up procedures'
     ],
@@ -194,13 +194,19 @@ const PRIORITY_EXPLANATIONS: Record<string, { criteria: string[]; recommendation
   },
   'Low': {
     criteria: [
-      'Variance amount under $100',
-      'Recently identified (under 30 days)',
+      'Variance amount under $500',
+      'Aging under 60 days',
       'Lower recovery potential or patient responsibility',
       'May resolve through normal payment cycles'
     ],
     recommendation: 'Monitor and batch process. Review if status unchanged after 30 days.'
   }
+};
+
+const PRIORITY_RANK: Record<string, number> = {
+  'High': 0,
+  'Medium': 1,
+  'Low': 2
 };
 
 function getEDIFormat(rootCauseCategory: string, rootCauseSubcategory: string): { format: string; description: string } {
@@ -497,6 +503,12 @@ export default function Dashboard() {
     const sorted = [...filteredData].sort((a, b) => {
       let aVal: any = a[sortColumn as keyof VarianceRecord];
       let bVal: any = b[sortColumn as keyof VarianceRecord];
+      
+      if (sortColumn === 'priority') {
+        const aRank = PRIORITY_RANK[aVal as string] ?? 3;
+        const bRank = PRIORITY_RANK[bVal as string] ?? 3;
+        return sortDirection === 'asc' ? aRank - bRank : bRank - aRank;
+      }
       
       if (typeof aVal === 'string') {
         aVal = aVal.toLowerCase();
