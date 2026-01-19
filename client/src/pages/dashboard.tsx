@@ -12,7 +12,10 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { 
   ArrowUpRight, 
-  ArrowDownRight, 
+  ArrowDownRight,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown, 
   DollarSign, 
   FileText, 
   AlertTriangle,
@@ -369,6 +372,8 @@ export default function Dashboard() {
   const [highlightedState, setHighlightedState] = useState<string | null>(null);
   const [selectedVariance, setSelectedVariance] = useState<VarianceRecord | null>(null);
   const [showResubmissionDraft, setShowResubmissionDraft] = useState(false);
+  const [sortColumn, setSortColumn] = useState<string>('varianceAmount');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   
   const SCALE_FACTOR = 324;
   const WEEKLY_VARIANCES = 13696;
@@ -488,10 +493,27 @@ export default function Dashboard() {
     net: Math.round(t.net * SCALE_FACTOR),
   })), [rawTrendData, SCALE_FACTOR]);
   
+  const sortedData = useMemo(() => {
+    const sorted = [...filteredData].sort((a, b) => {
+      let aVal: any = a[sortColumn as keyof VarianceRecord];
+      let bVal: any = b[sortColumn as keyof VarianceRecord];
+      
+      if (typeof aVal === 'string') {
+        aVal = aVal.toLowerCase();
+        bVal = bVal.toLowerCase();
+      }
+      
+      if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+    return sorted;
+  }, [filteredData, sortColumn, sortDirection]);
+  
   const paginatedData = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
-    return filteredData.slice(start, start + pageSize);
-  }, [filteredData, currentPage, pageSize]);
+    return sortedData.slice(start, start + pageSize);
+  }, [sortedData, currentPage, pageSize]);
   
   const totalPages = Math.ceil(filteredData.length / pageSize);
   
@@ -819,7 +841,16 @@ export default function Dashboard() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Users className="h-5 w-5" />
-              Payor Distribution (Sunburst)
+              Payor Distribution
+              {(selectedState !== "all" || selectedStatus !== "all" || selectedRootCause !== "all") && (
+                <span className="text-sm font-normal text-muted-foreground ml-2">
+                  ({[
+                    selectedState !== "all" && selectedState,
+                    selectedStatus !== "all" && selectedStatus,
+                    selectedRootCause !== "all" && selectedRootCause
+                  ].filter(Boolean).join(", ")})
+                </span>
+              )}
             </CardTitle>
             <CardDescription>
               Click a segment to drill down into individual payors
@@ -902,7 +933,7 @@ export default function Dashboard() {
                   variant="outline" 
                   size="sm" 
                   onClick={() => setSunburstSelectedType(null)}
-                  data-testid="button-sunburst-reset"
+                  data-testid="button-payor-reset"
                 >
                   <X className="h-4 w-4 mr-1" />
                   Clear Selection
@@ -915,7 +946,18 @@ export default function Dashboard() {
         <div className="grid gap-4 md:grid-cols-2">
           <Card>
             <CardHeader>
-              <CardTitle>Root Cause Analysis</CardTitle>
+              <CardTitle>
+                Root Cause Analysis
+                {(selectedPayorType !== "all" || selectedState !== "all" || selectedStatus !== "all") && (
+                  <span className="text-sm font-normal text-muted-foreground ml-2">
+                    ({[
+                      selectedPayorType !== "all" && selectedPayorType,
+                      selectedState !== "all" && selectedState,
+                      selectedStatus !== "all" && selectedStatus
+                    ].filter(Boolean).join(", ")})
+                  </span>
+                )}
+              </CardTitle>
               <CardDescription>
                 Click a segment to filter • Click outside to clear
                 {selectedRootCause !== "all" && (
@@ -1087,7 +1129,19 @@ export default function Dashboard() {
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle>Variance Details</CardTitle>
+                <CardTitle>
+                  Variance Details
+                  {(selectedPayorType !== "all" || selectedState !== "all" || selectedStatus !== "all" || selectedRootCause !== "all") && (
+                    <span className="text-sm font-normal text-muted-foreground ml-2">
+                      ({[
+                        selectedPayorType !== "all" && selectedPayorType,
+                        selectedState !== "all" && selectedState,
+                        selectedStatus !== "all" && selectedStatus,
+                        selectedRootCause !== "all" && selectedRootCause
+                      ].filter(Boolean).join(", ")})
+                    </span>
+                  )}
+                </CardTitle>
                 <CardDescription>
                   {formatNumber(filteredData.length)} variances • Page {currentPage} of {totalPages}
                 </CardDescription>
@@ -1111,16 +1165,176 @@ export default function Dashboard() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-[100px]">ID</TableHead>
-                    <TableHead>Payor</TableHead>
-                    <TableHead className="w-[60px]">State</TableHead>
-                    <TableHead>Root Cause</TableHead>
-                    <TableHead className="text-right">Billed</TableHead>
-                    <TableHead className="text-right">Variance</TableHead>
-                    <TableHead className="w-[80px]">Age</TableHead>
-                    <TableHead className="w-[100px]">Status</TableHead>
-                    <TableHead className="w-[70px]">Priority</TableHead>
-                    <TableHead>Patient</TableHead>
+                    <TableHead 
+                      className="w-[100px] cursor-pointer hover:bg-muted/50"
+                      onClick={() => {
+                        if (sortColumn === 'id') {
+                          setSortDirection(d => d === 'asc' ? 'desc' : 'asc');
+                        } else {
+                          setSortColumn('id');
+                          setSortDirection('asc');
+                        }
+                        setCurrentPage(1);
+                      }}
+                    >
+                      <div className="flex items-center gap-1">
+                        ID
+                        {sortColumn === 'id' ? (sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}
+                      </div>
+                    </TableHead>
+                    <TableHead 
+                      className="cursor-pointer hover:bg-muted/50"
+                      onClick={() => {
+                        if (sortColumn === 'payorName') {
+                          setSortDirection(d => d === 'asc' ? 'desc' : 'asc');
+                        } else {
+                          setSortColumn('payorName');
+                          setSortDirection('asc');
+                        }
+                        setCurrentPage(1);
+                      }}
+                    >
+                      <div className="flex items-center gap-1">
+                        Payor
+                        {sortColumn === 'payorName' ? (sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}
+                      </div>
+                    </TableHead>
+                    <TableHead 
+                      className="w-[60px] cursor-pointer hover:bg-muted/50"
+                      onClick={() => {
+                        if (sortColumn === 'state') {
+                          setSortDirection(d => d === 'asc' ? 'desc' : 'asc');
+                        } else {
+                          setSortColumn('state');
+                          setSortDirection('asc');
+                        }
+                        setCurrentPage(1);
+                      }}
+                    >
+                      <div className="flex items-center gap-1">
+                        State
+                        {sortColumn === 'state' ? (sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}
+                      </div>
+                    </TableHead>
+                    <TableHead 
+                      className="cursor-pointer hover:bg-muted/50"
+                      onClick={() => {
+                        if (sortColumn === 'rootCauseCategory') {
+                          setSortDirection(d => d === 'asc' ? 'desc' : 'asc');
+                        } else {
+                          setSortColumn('rootCauseCategory');
+                          setSortDirection('asc');
+                        }
+                        setCurrentPage(1);
+                      }}
+                    >
+                      <div className="flex items-center gap-1">
+                        Root Cause
+                        {sortColumn === 'rootCauseCategory' ? (sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}
+                      </div>
+                    </TableHead>
+                    <TableHead 
+                      className="text-right cursor-pointer hover:bg-muted/50"
+                      onClick={() => {
+                        if (sortColumn === 'billedAmount') {
+                          setSortDirection(d => d === 'asc' ? 'desc' : 'asc');
+                        } else {
+                          setSortColumn('billedAmount');
+                          setSortDirection('desc');
+                        }
+                        setCurrentPage(1);
+                      }}
+                    >
+                      <div className="flex items-center justify-end gap-1">
+                        Billed
+                        {sortColumn === 'billedAmount' ? (sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}
+                      </div>
+                    </TableHead>
+                    <TableHead 
+                      className="text-right cursor-pointer hover:bg-muted/50"
+                      onClick={() => {
+                        if (sortColumn === 'varianceAmount') {
+                          setSortDirection(d => d === 'asc' ? 'desc' : 'asc');
+                        } else {
+                          setSortColumn('varianceAmount');
+                          setSortDirection('desc');
+                        }
+                        setCurrentPage(1);
+                      }}
+                    >
+                      <div className="flex items-center justify-end gap-1">
+                        Variance
+                        {sortColumn === 'varianceAmount' ? (sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}
+                      </div>
+                    </TableHead>
+                    <TableHead 
+                      className="w-[80px] cursor-pointer hover:bg-muted/50"
+                      onClick={() => {
+                        if (sortColumn === 'agingDays') {
+                          setSortDirection(d => d === 'asc' ? 'desc' : 'asc');
+                        } else {
+                          setSortColumn('agingDays');
+                          setSortDirection('desc');
+                        }
+                        setCurrentPage(1);
+                      }}
+                    >
+                      <div className="flex items-center gap-1">
+                        Age
+                        {sortColumn === 'agingDays' ? (sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}
+                      </div>
+                    </TableHead>
+                    <TableHead 
+                      className="w-[100px] cursor-pointer hover:bg-muted/50"
+                      onClick={() => {
+                        if (sortColumn === 'status') {
+                          setSortDirection(d => d === 'asc' ? 'desc' : 'asc');
+                        } else {
+                          setSortColumn('status');
+                          setSortDirection('asc');
+                        }
+                        setCurrentPage(1);
+                      }}
+                    >
+                      <div className="flex items-center gap-1">
+                        Status
+                        {sortColumn === 'status' ? (sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}
+                      </div>
+                    </TableHead>
+                    <TableHead 
+                      className="w-[70px] cursor-pointer hover:bg-muted/50"
+                      onClick={() => {
+                        if (sortColumn === 'priority') {
+                          setSortDirection(d => d === 'asc' ? 'desc' : 'asc');
+                        } else {
+                          setSortColumn('priority');
+                          setSortDirection('asc');
+                        }
+                        setCurrentPage(1);
+                      }}
+                    >
+                      <div className="flex items-center gap-1">
+                        Priority
+                        {sortColumn === 'priority' ? (sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}
+                      </div>
+                    </TableHead>
+                    <TableHead 
+                      className="cursor-pointer hover:bg-muted/50"
+                      onClick={() => {
+                        if (sortColumn === 'patientName') {
+                          setSortDirection(d => d === 'asc' ? 'desc' : 'asc');
+                        } else {
+                          setSortColumn('patientName');
+                          setSortDirection('asc');
+                        }
+                        setCurrentPage(1);
+                      }}
+                    >
+                      <div className="flex items-center gap-1">
+                        Patient
+                        {sortColumn === 'patientName' ? (sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}
+                      </div>
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
