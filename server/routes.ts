@@ -4,6 +4,7 @@ import { storage } from "./storage";
 import { registerChatRoutes } from "./replit_integrations/chat";
 import { registerImageRoutes } from "./replit_integrations/image";
 import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
 import multer from "multer";
 import { 
   insertClauseTemplateSchema, 
@@ -30,6 +31,12 @@ const upload = multer({
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+});
+
+// Anthropic client for clause extraction - using Claude Sonnet 4.5
+// Uses user's own API key (ANTHROPIC_API_KEY)
+const anthropic = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
 export async function registerRoutes(
@@ -335,7 +342,7 @@ Return JSON array with top 3 recommendations in this format:
         return res.status(400).json({ error: "Failed to parse PDF file" });
       }
 
-      // Use AI to extract clauses from the text
+      // Use Claude Sonnet 4.5 to extract clauses from the text
       const prompt = `You are a legal contract analyst specializing in healthcare payor contracts. Analyze the following contract text and extract all distinct clauses. For each clause, identify:
 1. A short descriptive title
 2. The full clause text
@@ -343,7 +350,7 @@ Return JSON array with top 3 recommendations in this format:
 4. Any variables or placeholders in the clause (amounts, dates, percentages)
 5. Brief rationale for why this clause is important
 
-Return a JSON object with an array of clauses in this exact format:
+Return ONLY a valid JSON object with an array of clauses in this exact format, with no additional text:
 {
   "clauses": [
     {
@@ -361,14 +368,16 @@ CONTRACT TEXT:
 ${extractedText.substring(0, 30000)}`; // Limit text to avoid token limits
 
       try {
-        const response = await openai.chat.completions.create({
-          model: "gpt-5.1",
+        // Using Claude Sonnet 4.5 (claude-sonnet-4-5-20250929) for clause extraction
+        const response = await anthropic.messages.create({
+          model: "claude-sonnet-4-5-20250929",
+          max_tokens: 8000,
           messages: [{ role: "user", content: prompt }],
-          response_format: { type: "json_object" },
-          max_completion_tokens: 4000,
         });
 
-        const result = JSON.parse(response.choices[0]?.message?.content || "{}");
+        const responseText = response.content[0].type === "text" ? response.content[0].text : "";
+        const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+        const result = JSON.parse(jsonMatch ? jsonMatch[0] : "{}");
         const extractedClauses: ExtractedClause[] = (result.clauses || []).map((c: any, i: number) => ({
           id: c.id || `clause-${i + 1}`,
           title: c.title || `Clause ${i + 1}`,
