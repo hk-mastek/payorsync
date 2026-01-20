@@ -652,11 +652,12 @@ export default function Contracts() {
                           Copy
                         </Button>
                       </div>
-                      <Textarea 
-                        value={negotiationLetter}
-                        onChange={(e) => setNegotiationLetter(e.target.value)}
-                        className="flex-1 min-h-[400px] font-mono text-sm"
-                        data-testid="textarea-negotiation-letter"
+                      <div 
+                        className="flex-1 min-h-[400px] font-mono text-sm p-3 border rounded-md bg-background overflow-y-auto whitespace-pre-wrap"
+                        data-testid="div-negotiation-letter"
+                        dangerouslySetInnerHTML={{
+                          __html: negotiationLetter.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+                        }}
                       />
                     </div>
                   )}
