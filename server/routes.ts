@@ -34,9 +34,10 @@ const openai = new OpenAI({
 });
 
 // Anthropic client for clause extraction - using Claude Sonnet 4.5
-// Uses user's own API key (ANTHROPIC_API_KEY)
+// Uses Replit AI Integrations (billed to Replit credits, no separate API key needed)
 const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
+  apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
+  baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
 });
 
 export async function registerRoutes(
@@ -368,10 +369,10 @@ CONTRACT TEXT:
 ${extractedText.substring(0, 30000)}`; // Limit text to avoid token limits
 
       try {
-        // Using Claude Sonnet 4.5 (claude-sonnet-4-5-20250929) for clause extraction
+        // Using Claude Sonnet 4.5 via Replit AI Integrations for clause extraction
         const response = await anthropic.messages.create({
-          model: "claude-sonnet-4-5-20250929",
-          max_tokens: 8000,
+          model: "claude-sonnet-4-5",
+          max_tokens: 8192,
           messages: [{ role: "user", content: prompt }],
         });
 
