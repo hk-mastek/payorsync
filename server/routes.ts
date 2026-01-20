@@ -343,24 +343,62 @@ Return JSON array with top 3 recommendations in this format:
         return res.status(400).json({ error: "Failed to parse PDF file" });
       }
 
-      // Use Claude Sonnet 4.5 to extract clauses from the text
-      const prompt = `You are a legal contract analyst specializing in healthcare payor contracts. Analyze the following contract text and extract all distinct clauses. For each clause, identify:
-1. A short descriptive title
-2. The full clause text
-3. A likely category (e.g., "Reimbursement", "Timely Filing", "Termination", "Definitions", "Compliance", "Appeals", "Authorization")
-4. Any variables or placeholders in the clause (amounts, dates, percentages)
-5. Brief rationale for why this clause is important
+      // Use Claude Sonnet 4.5 to extract clauses with categorization and non-standard detection
+      const prompt = `You are a legal contract analyst specializing in ESRD (End-Stage Renal Disease) dialysis healthcare payor contracts. Analyze the following contract text and extract all distinct clauses.
 
-Return ONLY a valid JSON object with an array of clauses in this exact format, with no additional text:
+For each clause, you must:
+1. Extract the clause title and full text
+2. Assign to exactly ONE category from this list:
+   - "Payment & Reimbursement" (rates, fee schedules, bundled payments)
+   - "Coverage & Eligibility" (patient eligibility, covered services)
+   - "MSP Coordination & COB" (Medicare Secondary Payer, coordination of benefits)
+   - "Billing & Claims" (timely filing, claim submission requirements)
+   - "Variance & Dispute Resolution" (appeals, reconsideration, disputes)
+   - "Quality & Value-Based" (performance metrics, quality incentives)
+   - "Compliance & Regulatory" (HIPAA, legal requirements)
+   - "Term & Termination" (contract duration, renewal, termination rights)
+   - "Indemnification & Liability" (hold harmless, liability limits)
+   - "Data & Privacy" (PHI handling, data sharing)
+   - "Administrative" (notices, amendments, general provisions)
+3. Rate your category confidence (0-100)
+4. Identify variables/placeholders (amounts, dates, percentages)
+5. Determine if clause is NON-STANDARD by checking:
+   - Unusually short timely filing deadlines (<90 days)
+   - Low reimbursement rates (<90% of Medicare)
+   - Restrictive termination clauses (long notice periods >90 days)
+   - One-sided indemnification
+   - Unfavorable COB provisions
+   - Missing standard protections
+6. For non-standard clauses: assign similarity score (0-100, lower = more deviation) and explain the deviation
+
+Return ONLY a valid JSON object with an array of clauses in this exact format:
 {
   "clauses": [
     {
       "id": "clause-1",
       "title": "Clause Title",
       "text": "Full clause text...",
-      "categoryGuess": "Category Name",
+      "category": "Payment & Reimbursement",
+      "categoryConfidence": 95,
       "rationale": "Why this clause matters",
-      "variables": ["$500", "30 days"]
+      "variables": ["$500", "30 days"],
+      "isNonStandard": false,
+      "similarityScore": 85,
+      "deviationSummary": null,
+      "matchedStandardClause": null
+    },
+    {
+      "id": "clause-2",
+      "title": "Short Timely Filing",
+      "text": "Claims must be submitted within 45 days...",
+      "category": "Billing & Claims",
+      "categoryConfidence": 98,
+      "rationale": "Critical deadline for claim submission",
+      "variables": ["45 days"],
+      "isNonStandard": true,
+      "similarityScore": 40,
+      "deviationSummary": "45-day filing deadline is significantly shorter than industry standard 90-180 days, increasing denial risk",
+      "matchedStandardClause": "Standard Timely Filing (90+ days)"
     }
   ]
 }
@@ -383,9 +421,17 @@ ${extractedText.substring(0, 30000)}`; // Limit text to avoid token limits
           id: c.id || `clause-${i + 1}`,
           title: c.title || `Clause ${i + 1}`,
           text: c.text || "",
-          categoryGuess: c.categoryGuess,
+          categoryGuess: c.categoryGuess || c.category,
           rationale: c.rationale,
           variables: c.variables || [],
+          // Categorization fields
+          category: c.category,
+          categoryConfidence: c.categoryConfidence,
+          // Non-standard detection fields
+          isNonStandard: c.isNonStandard || false,
+          similarityScore: c.similarityScore,
+          deviationSummary: c.deviationSummary || null,
+          matchedStandardClause: c.matchedStandardClause || null,
         }));
 
         // Update the upload record with extracted clauses

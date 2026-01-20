@@ -140,6 +140,9 @@ export const clauseTemplates = pgTable("clause_templates", {
   previousVersionId: varchar("previous_version_id"),
   changeSummary: text("change_summary"),
   
+  // Standard clause marker for comparison
+  isStandard: boolean("is_standard").default(false),
+  
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
@@ -337,6 +340,23 @@ export const contractUploads = pgTable("contract_uploads", {
   updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
+// ESRD Payor Contract Clause Categories
+export const CLAUSE_CATEGORIES = [
+  "Payment & Reimbursement",
+  "Coverage & Eligibility",
+  "MSP Coordination & COB",
+  "Billing & Claims",
+  "Variance & Dispute Resolution",
+  "Quality & Value-Based",
+  "Compliance & Regulatory",
+  "Term & Termination",
+  "Indemnification & Liability",
+  "Data & Privacy",
+  "Administrative",
+] as const;
+
+export type ClauseCategoryType = typeof CLAUSE_CATEGORIES[number];
+
 // Type definitions for JSONB fields
 export interface ExtractedClause {
   id: string;
@@ -345,6 +365,14 @@ export interface ExtractedClause {
   categoryGuess?: string;
   rationale?: string;
   variables?: string[];
+  // Categorization fields
+  category?: ClauseCategoryType;
+  categoryConfidence?: number; // 0-100
+  // Non-standard detection fields
+  isNonStandard?: boolean;
+  similarityScore?: number; // 0-100, higher = more similar to standard
+  deviationSummary?: string; // AI explanation of what differs from standard
+  matchedStandardClause?: string; // Title of matched standard clause for reference
 }
 
 export interface ClauseDecision {

@@ -23,7 +23,9 @@ import {
   X,
   MessageSquare,
   Library,
-  Send
+  Send,
+  Filter,
+  AlertTriangle
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -50,6 +52,21 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
@@ -72,6 +89,23 @@ interface Contract {
   updatedAt: string;
 }
 
+// ESRD Payor Contract Clause Categories
+const CLAUSE_CATEGORIES = [
+  "Payment & Reimbursement",
+  "Coverage & Eligibility",
+  "MSP Coordination & COB",
+  "Billing & Claims",
+  "Variance & Dispute Resolution",
+  "Quality & Value-Based",
+  "Compliance & Regulatory",
+  "Term & Termination",
+  "Indemnification & Liability",
+  "Data & Privacy",
+  "Administrative",
+] as const;
+
+type ClauseCategoryType = typeof CLAUSE_CATEGORIES[number];
+
 interface ExtractedClause {
   id: string;
   title: string;
@@ -79,6 +113,14 @@ interface ExtractedClause {
   categoryGuess?: string;
   rationale?: string;
   variables?: string[];
+  // Categorization fields
+  category?: ClauseCategoryType;
+  categoryConfidence?: number;
+  // Non-standard detection fields
+  isNonStandard?: boolean;
+  similarityScore?: number;
+  deviationSummary?: string;
+  matchedStandardClause?: string;
 }
 
 interface ContractUpload {
@@ -132,6 +174,10 @@ export default function Contracts() {
   const [negotiationLetter, setNegotiationLetter] = useState<string>("");
   const [isGeneratingLetter, setIsGeneratingLetter] = useState(false);
   const [isAddingToLibrary, setIsAddingToLibrary] = useState(false);
+  
+  // Clause filter state
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const [showNonStandardOnly, setShowNonStandardOnly] = useState(false);
 
   // Fetch contracts from API
   const { data: contracts = [], isLoading } = useQuery<Contract[]>({
@@ -169,6 +215,8 @@ export default function Contracts() {
     setIsUploading(true);
     setClauseDecisions({});
     setNegotiationLetter("");
+    setSelectedCategory("all");
+    setShowNonStandardOnly(false);
 
     try {
       const formData = new FormData();
@@ -357,6 +405,11 @@ export default function Contracts() {
                           {currentUpload.extractedClauses?.length || 0} clauses found • 
                           <span className="text-green-600 ml-1">{acceptCount} Accept</span> • 
                           <span className="text-amber-600 ml-1">{negotiateCount} Negotiate</span>
+                          {(currentUpload.extractedClauses || []).filter(c => c.isNonStandard).length > 0 && (
+                            <span className="text-red-600 ml-1">
+                              • {(currentUpload.extractedClauses || []).filter(c => c.isNonStandard).length} Non-Standard
+                            </span>
+                          )}
                         </p>
                       </div>
                       <div className="flex gap-2">
@@ -381,35 +434,142 @@ export default function Contracts() {
                         </Button>
                       </div>
                     </div>
+
+                    {/* Filter Controls */}
+                    <div className="flex items-center gap-4 mb-4 p-3 bg-muted/50 rounded-lg">
+                      <div className="flex items-center gap-2">
+                        <Filter className="h-4 w-4 text-muted-foreground" />
+                        <Label className="text-sm font-medium">Filters:</Label>
+                      </div>
+                      
+                      {/* Category Filter */}
+                      <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                        <SelectTrigger className="w-[200px] h-8" data-testid="select-category-filter">
+                          <SelectValue placeholder="All Categories" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Categories</SelectItem>
+                          {CLAUSE_CATEGORIES.map((cat) => (
+                            <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+
+                      {/* Non-Standard Toggle */}
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          id="nonstandard-filter"
+                          checked={showNonStandardOnly}
+                          onCheckedChange={setShowNonStandardOnly}
+                          data-testid="switch-nonstandard-filter"
+                        />
+                        <Label htmlFor="nonstandard-filter" className="text-sm flex items-center gap-1 cursor-pointer">
+                          <AlertTriangle className="h-3.5 w-3.5 text-red-500" />
+                          Non-Standard Only
+                        </Label>
+                      </div>
+                    </div>
                     
                     <ScrollArea className="flex-1 pr-4">
-                      <div className="space-y-3">
-                        {(currentUpload.extractedClauses || []).map((clause) => (
+                      {(() => {
+                        // Filter clauses first
+                        const filteredClauses = (currentUpload.extractedClauses || []).filter(clause => {
+                          if (selectedCategory !== "all" && clause.category !== selectedCategory) return false;
+                          if (showNonStandardOnly && !clause.isNonStandard) return false;
+                          return true;
+                        });
+
+                        // Group by category
+                        const groupedClauses: Record<string, ExtractedClause[]> = {};
+                        filteredClauses.forEach(clause => {
+                          const cat = clause.category || "Uncategorized";
+                          if (!groupedClauses[cat]) groupedClauses[cat] = [];
+                          groupedClauses[cat].push(clause);
+                        });
+
+                        const categoryKeys = Object.keys(groupedClauses);
+
+                        if (categoryKeys.length === 0) {
+                          return (
+                            <div className="text-center py-8 text-muted-foreground">
+                              <Filter className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                              <p>No clauses match the current filters</p>
+                              <Button 
+                                variant="link" 
+                                size="sm"
+                                onClick={() => {
+                                  setSelectedCategory("all");
+                                  setShowNonStandardOnly(false);
+                                }}
+                              >
+                                Clear filters
+                              </Button>
+                            </div>
+                          );
+                        }
+
+                        // Render clause card helper
+                        const renderClauseCard = (clause: ExtractedClause) => (
                           <Card 
                             key={clause.id} 
                             className={cn(
                               "transition-colors",
-                              clauseDecisions[clause.id] === "negotiate" && "border-amber-500/50 bg-amber-50/50 dark:bg-amber-900/10"
+                              clauseDecisions[clause.id] === "negotiate" && "border-amber-500/50 bg-amber-50/50 dark:bg-amber-900/10",
+                              clause.isNonStandard && "border-red-500/50 bg-red-50/30 dark:bg-red-900/10"
                             )}
                             data-testid={`clause-card-${clause.id}`}
                           >
                             <CardContent className="p-4">
                               <div className="flex items-start justify-between gap-4">
                                 <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2 mb-2">
+                                  <div className="flex items-center gap-2 mb-2 flex-wrap">
                                     <h4 className="font-medium">{clause.title}</h4>
-                                    {clause.categoryGuess && (
-                                      <Badge variant="outline" className="text-xs">{clause.categoryGuess}</Badge>
+                                    {clause.categoryConfidence && (
+                                      <span className="text-xs text-muted-foreground">({clause.categoryConfidence}% conf)</span>
+                                    )}
+                                    {clause.isNonStandard && (
+                                      <Badge variant="destructive" className="text-xs gap-1">
+                                        <AlertTriangle className="h-3 w-3" />
+                                        Non-Standard
+                                      </Badge>
                                     )}
                                   </div>
                                   <p className="text-sm text-muted-foreground line-clamp-3">{clause.text}</p>
-                                  {clause.rationale && (
+                                  
+                                  {/* Non-standard deviation explanation */}
+                                  {clause.isNonStandard && clause.deviationSummary && (
+                                    <div className="mt-3 p-2 bg-red-100/50 dark:bg-red-900/20 rounded border border-red-200 dark:border-red-800">
+                                      <div className="flex items-start gap-2">
+                                        <AlertTriangle className="h-4 w-4 text-red-600 mt-0.5 flex-shrink-0" />
+                                        <div>
+                                          <p className="text-xs font-medium text-red-800 dark:text-red-300">
+                                            Deviation from Standard
+                                            {clause.similarityScore !== undefined && (
+                                              <span className="ml-2 text-red-600">
+                                                (Similarity: {clause.similarityScore}%)
+                                              </span>
+                                            )}
+                                          </p>
+                                          <p className="text-xs text-red-700 dark:text-red-400 mt-1">
+                                            {clause.deviationSummary}
+                                          </p>
+                                          {clause.matchedStandardClause && (
+                                            <p className="text-xs text-muted-foreground mt-1">
+                                              Expected: {clause.matchedStandardClause}
+                                            </p>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
+                                  
+                                  {clause.rationale && !clause.isNonStandard && (
                                     <p className="text-xs text-muted-foreground mt-2 italic">
                                       Importance: {clause.rationale}
                                     </p>
                                   )}
                                   {clause.variables && clause.variables.length > 0 && (
-                                    <div className="flex gap-1 mt-2">
+                                    <div className="flex gap-1 mt-2 flex-wrap">
                                       {clause.variables.map((v, i) => (
                                         <Badge key={i} variant="secondary" className="text-xs">{v}</Badge>
                                       ))}
@@ -441,8 +601,41 @@ export default function Contracts() {
                               </div>
                             </CardContent>
                           </Card>
-                        ))}
-                      </div>
+                        );
+
+                        return (
+                          <Accordion type="multiple" defaultValue={categoryKeys} className="space-y-2">
+                            {categoryKeys.map((category) => {
+                              const clauses = groupedClauses[category];
+                              const nonStandardCount = clauses.filter(c => c.isNonStandard).length;
+                              
+                              return (
+                                <AccordionItem key={category} value={category} className="border rounded-lg px-4">
+                                  <AccordionTrigger className="hover:no-underline" data-testid={`accordion-${category}`}>
+                                    <div className="flex items-center gap-3">
+                                      <span className="font-semibold">{category}</span>
+                                      <Badge variant="secondary" className="text-xs">
+                                        {clauses.length} clause{clauses.length !== 1 ? 's' : ''}
+                                      </Badge>
+                                      {nonStandardCount > 0 && (
+                                        <Badge variant="destructive" className="text-xs gap-1">
+                                          <AlertTriangle className="h-3 w-3" />
+                                          {nonStandardCount} non-standard
+                                        </Badge>
+                                      )}
+                                    </div>
+                                  </AccordionTrigger>
+                                  <AccordionContent>
+                                    <div className="space-y-3 pt-2">
+                                      {clauses.map(renderClauseCard)}
+                                    </div>
+                                  </AccordionContent>
+                                </AccordionItem>
+                              );
+                            })}
+                          </Accordion>
+                        );
+                      })()}
                     </ScrollArea>
                   </div>
 
@@ -482,6 +675,8 @@ export default function Contracts() {
                       setCurrentUpload(null);
                       setClauseDecisions({});
                       setNegotiationLetter("");
+                      setSelectedCategory("all");
+                      setShowNonStandardOnly(false);
                     }}
                     data-testid="button-upload-another"
                   >
