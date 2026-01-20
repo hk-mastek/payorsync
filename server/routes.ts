@@ -15,6 +15,7 @@ import {
   type ExtractedClause
 } from "@shared/schema";
 import { fromError } from "zod-validation-error";
+import { jsonrepair } from "jsonrepair";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -415,8 +416,34 @@ ${extractedText.substring(0, 30000)}`; // Limit text to avoid token limits
         });
 
         const responseText = response.content[0].type === "text" ? response.content[0].text : "";
+        
+        // Robust JSON extraction with jsonrepair library for malformed JSON
+        let result: { clauses?: any[] } = { clauses: [] };
+        
+        // Extract JSON block from response
         const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-        const result = JSON.parse(jsonMatch ? jsonMatch[0] : "{}");
+        if (!jsonMatch) {
+          throw new Error("No JSON found in AI response");
+        }
+        
+        try {
+          // First try: direct parse
+          result = JSON.parse(jsonMatch[0]);
+        } catch (parseError) {
+          console.log("Initial JSON parse failed, attempting jsonrepair...");
+          try {
+            // Second try: use jsonrepair to fix malformed JSON
+            // This handles unescaped quotes, missing commas, trailing commas, etc.
+            const repairedJson = jsonrepair(jsonMatch[0]);
+            result = JSON.parse(repairedJson);
+            console.log("JSON repair successful");
+          } catch (repairError) {
+            console.error("jsonrepair failed:", repairError);
+            console.log("Raw AI response (first 2000 chars):", responseText.substring(0, 2000));
+            throw new Error("Could not parse AI response as valid JSON");
+          }
+        }
+        
         const extractedClauses: ExtractedClause[] = (result.clauses || []).map((c: any, i: number) => ({
           id: c.id || `clause-${i + 1}`,
           title: c.title || `Clause ${i + 1}`,
