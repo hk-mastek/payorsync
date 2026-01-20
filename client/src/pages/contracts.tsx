@@ -234,12 +234,8 @@ export default function Contracts() {
       const upload = await response.json();
       setCurrentUpload(upload);
       
-      // Initialize all clauses as "accept" by default
-      const initialDecisions: Record<string, "accept" | "negotiate"> = {};
-      (upload.extractedClauses || []).forEach((clause: ExtractedClause) => {
-        initialDecisions[clause.id] = "accept";
-      });
-      setClauseDecisions(initialDecisions);
+      // Don't set any default selection - user must explicitly choose Accept or Negotiate
+      setClauseDecisions({});
 
       toast({ title: "PDF processed", description: `Extracted ${upload.extractedClauses?.length || 0} clauses.` });
     } catch (error) {
