@@ -7,6 +7,11 @@ const isDevelopment = import.meta.env.DEV || import.meta.env.MODE === 'developme
 // API Base URL - uses environment variable if set, otherwise falls back to localhost for local dev
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || (isDevelopment ? 'http://localhost:8000' : '');
 
+console.log("Server: " ,isDevelopment);
+console.log("API Url: " ,API_BASE_URL);
+console.log("Vite URL: ", import.meta.env.VITE_API_BASE_URL);
+
+
 // API Endpoints
 export const API_ENDPOINTS = {
   // Dashboard endpoints
