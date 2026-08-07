@@ -5,13 +5,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { 
+import { Skeleton } from "@/components/ui/skeleton";
+import {
   ArrowUpRight, 
   ArrowDownRight,
   ArrowUpDown,
@@ -33,7 +33,9 @@ import {
   Users,
   MapPin,
   BarChart3,
-  X
+  X,
+  Loader2,
+  WifiOff
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { 
@@ -44,31 +46,36 @@ import {
   CartesianGrid, 
   Tooltip as RechartsTooltip, 
   ResponsiveContainer,
-  LineChart,
   Line,
   Area,
   AreaChart,
   Cell,
   Legend,
-  Treemap,
   PieChart,
   Pie
 } from "recharts";
 import {
-  generateVarianceData,
-  calculateKPIs,
+  STATES,
+  ROOT_CAUSES,
+  STATUSES,
+} from "@shared/dashboardData";
+import { useDashboardSummary } from "@/hooks/useDashboardSummary";
+import {
+  useAllVariances,
+  useVariances,
+  useVarianceDetails,
   groupByPayorType,
   groupByPayorWithType,
   groupByState,
   groupByRootCause,
   groupByAgingBucket,
   getTrendData,
-  PAYORS,
-  STATES,
-  ROOT_CAUSES,
-  STATUSES,
-  type VarianceRecord
-} from "@shared/dashboardData";
+  calculateKPIs,
+  calculatePayorScorecards as calculatePayorScorecardsFromVariances,
+  calculateOrgMetrics as calculateOrgMetricsFromVariances,
+  type VarianceRecord,
+  type PayorScorecard,
+} from "@/hooks/useVariances";
 
 const COLORS = [
   'hsl(196, 100%, 37%)',
@@ -174,35 +181,6 @@ const ROOT_CAUSE_EXPLANATIONS: Record<string, { title: string; bullets: string[]
   }
 };
 
-const PRIORITY_EXPLANATIONS: Record<string, { criteria: string[]; recommendation: string }> = {
-  'High': {
-    criteria: [
-      'Variance amount exceeds $1,000',
-      'OR aging over 120 days (approaching timely filing limits)',
-      'High recovery potential based on root cause',
-      'Requires immediate escalation to prevent revenue loss'
-    ],
-    recommendation: 'Prioritize immediate action. Escalate to supervisor if unresolved within 5 business days.'
-  },
-  'Medium': {
-    criteria: [
-      'Variance amount between $500 and $1,000',
-      'OR aging between 60-120 days',
-      'Moderate recovery potential',
-      'Requires standard follow-up procedures'
-    ],
-    recommendation: 'Address within standard workflow. Target resolution within 2 weeks.'
-  },
-  'Low': {
-    criteria: [
-      'Variance amount under $500',
-      'Aging under 60 days',
-      'Lower recovery potential or patient responsibility',
-      'May resolve through normal payment cycles'
-    ],
-    recommendation: 'Monitor and batch process. Review if status unchanged after 30 days.'
-  }
-};
 
 const PRIORITY_RANK: Record<string, number> = {
   'High': 0,
@@ -210,38 +188,7 @@ const PRIORITY_RANK: Record<string, number> = {
   'Low': 2
 };
 
-interface PayorScorecard {
-  payorName: string;
-  payorType: string;
-  varianceCount: number;
-  denialRate: number;
-  netCollectionRate: number;
-  daysInAR: number;
-  cleanClaimRate: number;
-  contractCompliance: number;
-  overallScore: string;
-  writeOffAmount: number;
-  openVarianceCount: number;
-  totalVarianceAmount: number;
-}
-
-interface OrgMetrics {
-  denialRate: number;
-  netCollectionRate: number;
-  avgDaysInAR: number;
-  cleanClaimRate: number;
-  contractCompliance: number;
-}
-
-const AGING_MIDPOINTS: Record<string, number> = {
-  '0-30 days': 15,
-  '31-60 days': 45,
-  '61-90 days': 75,
-  '91-120 days': 105,
-  '121-180 days': 150,
-  '181-365 days': 273,
-  '365+ days': 400
-};
+// PayorScorecard, OrgMetrics, and AGING_MIDPOINTS are imported from useVariances
 
 const SCORECARD_THRESHOLDS = {
   denialRate: { green: 5, yellow: 10 },
@@ -264,26 +211,7 @@ function getMetricColor(metric: keyof typeof SCORECARD_THRESHOLDS, value: number
   }
 }
 
-function calculateOverallScore(denial: number, collection: number, ar: number, clean: number, compliance: number): string {
-  let greenCount = 0;
-  let redCount = 0;
-  
-  if (denial < 5) greenCount++; else if (denial > 10) redCount++;
-  if (collection > 96) greenCount++; else if (collection < 93) redCount++;
-  if (ar < 40) greenCount++; else if (ar > 60) redCount++;
-  if (clean > 95) greenCount++; else if (clean < 90) redCount++;
-  if (compliance > 98) greenCount++; else if (compliance < 95) redCount++;
-  
-  if (greenCount === 5) return 'A';
-  if (greenCount === 4) return 'B+';
-  if (greenCount === 3) return 'B';
-  if (greenCount === 2 && redCount === 0) return 'B-';
-  if (greenCount === 2) return 'C+';
-  if (greenCount === 1 && redCount <= 1) return 'C';
-  if (greenCount === 1) return 'C-';
-  if (redCount <= 2) return 'D';
-  return 'F';
-}
+// calculateOverallScore is now in useVariances hook
 
 function getScoreColor(score: string): string {
   if (score.startsWith('A')) return 'text-emerald-600 bg-emerald-100';
@@ -292,107 +220,9 @@ function getScoreColor(score: string): string {
   return 'text-red-600 bg-red-100';
 }
 
-function calculateOrgMetrics(variances: VarianceRecord[]): OrgMetrics {
-  const totalVariances = variances.length;
-  if (totalVariances === 0) return { denialRate: 0, netCollectionRate: 0, avgDaysInAR: 0, cleanClaimRate: 0, contractCompliance: 0 };
-  
-  const denialRelated = variances.filter(v => 
-    ['Authorization Issues', 'Medical Necessity', 'Coding Errors'].includes(v.rootCauseCategory)
-  ).length;
-  
-  const openVariances = variances.filter(v => 
-    ['Open', 'In Progress', 'Under Appeal'].includes(v.status)
-  );
-  
-  const resolvedVariances = variances.filter(v => v.status === 'Resolved');
-  
-  const totalBilled = variances.reduce((sum, v) => sum + v.billedAmount, 0);
-  const totalVariance = variances.reduce((sum, v) => sum + v.varianceAmount, 0);
-  
-  const totalAgingDays = openVariances.reduce((sum, v) => sum + (AGING_MIDPOINTS[v.agingBucket] || v.agingDays), 0);
-  const avgDaysInAR = openVariances.length > 0 ? Math.round(totalAgingDays / openVariances.length) : 0;
-  
-  const cleanClaims = resolvedVariances.filter(v => 
-    !['181-365 days', '365+ days'].includes(v.agingBucket)
-  );
-  
-  const contractualVariances = variances.filter(v => v.rootCauseCategory === 'Contractual Disputes');
-  
-  return {
-    denialRate: (denialRelated / totalVariances) * 100,
-    netCollectionRate: totalBilled > 0 ? ((totalBilled - totalVariance) / totalBilled) * 100 : 0,
-    avgDaysInAR,
-    cleanClaimRate: (resolvedVariances.length / totalVariances) * 100,
-    contractCompliance: 100 - ((contractualVariances.length / totalVariances) * 100)
-  };
-}
+// calculateOrgMetrics is now in useVariances hook as calculateOrgMetricsFromVariances
 
-function calculatePayorScorecards(variances: VarianceRecord[]): PayorScorecard[] {
-  const payorGroups: Record<string, VarianceRecord[]> = {};
-  
-  variances.forEach(v => {
-    if (!payorGroups[v.payorName]) payorGroups[v.payorName] = [];
-    payorGroups[v.payorName].push(v);
-  });
-  
-  return Object.entries(payorGroups)
-    .filter(([_, payorVariances]) => payorVariances.length >= 10)
-    .map(([payorName, payorVariances]) => {
-      const payorType = payorVariances[0]?.payorType || 'Unknown';
-      const totalVariances = payorVariances.length;
-      
-      const denialVariances = payorVariances.filter(v => 
-        ['Authorization Issues', 'Medical Necessity', 'Coding Errors'].includes(v.rootCauseCategory)
-      );
-      const rawDenialRate = (denialVariances.length / totalVariances) * 100;
-      const denialRate = Math.min(rawDenialRate, 65);
-      
-      const totalBilled = payorVariances.reduce((sum, v) => sum + v.billedAmount, 0);
-      const totalVariance = payorVariances.reduce((sum, v) => sum + v.varianceAmount, 0);
-      const writtenOff = payorVariances.filter(v => v.status === 'Written Off');
-      const totalWriteOff = writtenOff.reduce((sum, v) => sum + v.varianceAmount, 0);
-      
-      const rawNetCollectionRate = totalBilled > 0 ? ((totalBilled - totalVariance) / totalBilled) * 100 : 0;
-      const denialImpact = denialRate * 0.15;
-      const netCollectionRate = Math.max(70, Math.min(98, rawNetCollectionRate - denialImpact * 0.3));
-      
-      const openVariances = payorVariances.filter(v => 
-        ['Open', 'In Progress', 'Under Appeal'].includes(v.status)
-      );
-      const totalAgingDays = openVariances.reduce((sum, v) => sum + (AGING_MIDPOINTS[v.agingBucket] || v.agingDays), 0);
-      const rawDaysInAR = openVariances.length > 0 ? Math.round(totalAgingDays / openVariances.length) : 30;
-      const daysInAR = Math.max(25, Math.min(90, rawDaysInAR));
-      
-      const resolvedVariances = payorVariances.filter(v => v.status === 'Resolved');
-      const cleanClaims = resolvedVariances.filter(v => 
-        !['181-365 days', '365+ days'].includes(v.agingBucket)
-      );
-      const rawCleanClaimRate = totalVariances > 0 ? (cleanClaims.length / totalVariances) * 100 : 0;
-      const cleanClaimRate = Math.max(75, Math.min(98, rawCleanClaimRate + (100 - denialRate) * 0.2));
-      
-      const contractualVariances = payorVariances.filter(v => v.rootCauseCategory === 'Contractual Disputes');
-      const rawContractCompliance = 100 - ((contractualVariances.length / totalVariances) * 100);
-      const contractCompliance = Math.max(80, Math.min(99, rawContractCompliance));
-      
-      return {
-        payorName,
-        payorType,
-        varianceCount: totalVariances,
-        denialRate,
-        netCollectionRate,
-        daysInAR,
-        cleanClaimRate,
-        contractCompliance,
-        overallScore: calculateOverallScore(denialRate, netCollectionRate, daysInAR, cleanClaimRate, contractCompliance),
-        writeOffAmount: totalWriteOff,
-        openVarianceCount: openVariances.length,
-        totalVarianceAmount: totalVariance
-      };
-    }).sort((a, b) => {
-      const scoreOrder = ['A', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D', 'F'];
-      return scoreOrder.indexOf(a.overallScore) - scoreOrder.indexOf(b.overallScore);
-    });
-}
+// calculatePayorScorecards is now in useVariances hook as calculatePayorScorecardsFromVariances
 
 function getEDIFormat(rootCauseCategory: string, rootCauseSubcategory: string): { format: string; description: string } {
   if (rootCauseCategory === 'Coding Errors' || rootCauseCategory === 'Claim Submission Errors') {
@@ -548,7 +378,7 @@ function KPICard({ title, value, trend, trendLabel, icon, iconColor, onClick, po
 }
 
 export default function Dashboard() {
-  const [lastUpdated] = useState(new Date());
+  const [lastUpdated, setLastUpdated] = useState(new Date());
   const [isInsightsOpen, setIsInsightsOpen] = useState(true);
   const [selectedPayorType, setSelectedPayorType] = useState<string>("all");
   const [selectedState, setSelectedState] = useState<string>("all");
@@ -563,6 +393,14 @@ export default function Dashboard() {
   const [highlightedState, setHighlightedState] = useState<string | null>(null);
   const [selectedVariance, setSelectedVariance] = useState<VarianceRecord | null>(null);
   const [showResubmissionDraft, setShowResubmissionDraft] = useState(false);
+  
+  // Fetch variance details from API when a variance is selected
+  // Use uuid if available, otherwise use id
+  const {
+    data: varianceDetails, 
+    isLoading: isDetailsLoading 
+  } = useVarianceDetails(selectedVariance?.uuid || selectedVariance?.id || null);
+
   const [sortColumn, setSortColumn] = useState<string>('varianceAmount');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [scorecardSortColumn, setScorecardSortColumn] = useState<string>('varianceCount');
@@ -572,9 +410,59 @@ export default function Dashboard() {
   const [scorecardPayorTypeFilter, setScorecardPayorTypeFilter] = useState<string>("all");
   const [scorecardSearch, setScorecardSearch] = useState<string>("");
   
-  const SCALE_FACTOR = 324;
-  const WEEKLY_VARIANCES = 13696;
-  const allData = useMemo(() => generateVarianceData(2250), []);
+  // ===== API DATA FETCHING =====
+  // Fetch dashboard summary from external API (http://localhost:8000/api/v1/dashboard/summary)
+  const { data: apiData, isLoading: isApiLoading, isError: isApiError, refetch: refetchApi } = useDashboardSummary();
+  
+  // Fetch ALL variance data from API (for charts/aggregations)
+  const {
+    data: variancesData, 
+    isLoading: isVariancesLoading, 
+    isError: isVariancesError, 
+    refetch: refetchVariances 
+  } = useAllVariances();
+
+  // Fetch PAGINATED variance data for the table (server-side pagination)
+  const { 
+    data: paginatedVariancesData, 
+    isLoading: isPaginatedLoading,
+    refetch: refetchPaginatedVariances 
+  } = useVariances({
+    page: currentPage,
+    pageSize: pageSize,
+    payorType: selectedPayorType,
+    state: selectedState,
+    status: selectedStatus,
+    rootCause: selectedRootCause,
+    search: searchQuery,
+    sortColumn: sortColumn,
+    sortDirection: sortDirection,
+  });
+
+  // Update lastUpdated when API data changes
+  useEffect(() => {
+    if (apiData || variancesData) {
+      setLastUpdated(new Date());
+    }
+  }, [apiData, variancesData]);
+
+  // All variance data from API (for charts and aggregations)
+  const allData = useMemo(() => {
+    return variancesData?.variances || [];
+  }, [variancesData]);
+  
+  // Paginated variance data for the table
+  const paginatedData = useMemo(() => {
+    return paginatedVariancesData?.variances || [];
+  }, [paginatedVariancesData]);
+  
+  // Server-side pagination info
+  const totalCount = paginatedVariancesData?.totalCount || 0;
+  const totalPages = paginatedVariancesData?.totalPages || 1;
+  
+  // Check if any data is loading or has errors
+  const isLoading = isApiLoading || isVariancesLoading;
+  const hasError = isApiError && isVariancesError;
   
   const filteredData = useMemo(() => {
     return allData.filter(v => {
@@ -609,118 +497,122 @@ export default function Dashboard() {
     });
   }, [allData, selectedPayorType, selectedStatus, selectedRootCause, searchQuery]);
   
+  // ===== KPIs: API DATA =====
   const rawKpis = useMemo(() => calculateKPIs(filteredData), [filteredData]);
-  const kpis = useMemo(() => ({
-    totalOpenVariances: Math.round(rawKpis.totalOpenVariances * SCALE_FACTOR),
-    totalVarianceAmount: Math.round(rawKpis.totalVarianceAmount * SCALE_FACTOR),
-    newThisWeek: WEEKLY_VARIANCES,
-    resolvedThisWeek: Math.round(WEEKLY_VARIANCES * 0.72),
-    avgDaysToResolution: rawKpis.avgDaysToResolution,
-    recoveryRate: rawKpis.recoveryRate,
-  }), [rawKpis, SCALE_FACTOR, WEEKLY_VARIANCES]);
-  
+  const kpis = useMemo(() => {
+    if (apiData?.kpis) {
+      return apiData.kpis;
+    }
+    // Use calculated KPIs from variance data
+    return {
+      totalOpenVariances: rawKpis.totalOpenVariances,
+      totalVarianceAmount: rawKpis.totalVarianceAmount,
+      newThisWeek: rawKpis.newThisWeek,
+      resolvedThisWeek: rawKpis.resolvedThisWeek,
+      avgDaysToResolution: rawKpis.avgDaysToResolution,
+      recoveryRate: rawKpis.recoveryRate,
+    };
+  }, [apiData, rawKpis]);
+
+  // ===== PAYOR TYPE DATA: API DATA =====
   const rawPayorTypeData = useMemo(() => groupByPayorType(filteredData), [filteredData]);
-  const payorTypeData = useMemo(() => rawPayorTypeData.map(p => ({
-    ...p,
-    count: Math.round(p.count * SCALE_FACTOR),
-    amount: Math.round(p.amount * SCALE_FACTOR),
-  })), [rawPayorTypeData, SCALE_FACTOR]);
-  
+  const payorTypeData = useMemo(() => {
+    if (apiData?.payorTypeData) {
+      return apiData.payorTypeData;
+    }
+    // Use calculated data from variances
+    return rawPayorTypeData;
+  }, [apiData, rawPayorTypeData]);
+
+  // Sunburst data for payor distribution chart
   const rawSunburstData = useMemo(() => groupByPayorWithType(filteredData), [filteredData]);
-  const sunburstInnerData = useMemo(() => rawSunburstData.map((t, idx) => ({
-    name: t.type,
-    value: Math.round(t.amount * SCALE_FACTOR),
-    count: Math.round(t.count * SCALE_FACTOR),
-    fill: COLORS[idx % COLORS.length],
-  })), [rawSunburstData, SCALE_FACTOR]);
-  
+  const sunburstInnerData = useMemo(() => {
+    // Use API payor type data for inner ring if available
+    if (apiData?.payorTypeData) {
+      return apiData.payorTypeData.map((t, idx) => ({
+        name: t.type,
+        value: t.amount,
+        count: t.count,
+        fill: COLORS[idx % COLORS.length],
+      }));
+    }
+    // Use calculated data from variances
+    return rawSunburstData.map((t, idx) => ({
+      name: t.type,
+      value: t.amount,
+      count: t.count,
+      fill: COLORS[idx % COLORS.length],
+    }));
+  }, [apiData, rawSunburstData]);
+
+  // Outer ring uses variance data (individual payors)
   const sunburstOuterData = useMemo(() => {
     if (!sunburstSelectedType) return [];
     const selectedTypeData = rawSunburstData.find(t => t.type === sunburstSelectedType);
     if (!selectedTypeData) return [];
-    const typeIndex = rawSunburstData.findIndex(t => t.type === sunburstSelectedType);
-    const baseColor = COLORS[typeIndex % COLORS.length];
     return selectedTypeData.payors.slice(0, 10).map((p, idx) => ({
       name: p.name,
-      value: Math.round(p.amount * SCALE_FACTOR),
-      count: Math.round(p.count * SCALE_FACTOR),
+      value: p.amount,
+      count: p.count,
       fill: `hsl(${196 + idx * 15}, ${70 - idx * 3}%, ${40 + idx * 4}%)`,
     }));
-  }, [rawSunburstData, sunburstSelectedType, SCALE_FACTOR]);
-  
+  }, [rawSunburstData, sunburstSelectedType]);
+
+  // ===== STATE DATA: API DATA =====
   const rawStateData = useMemo(() => groupByState(stateChartData), [stateChartData]);
-  const stateData = useMemo(() => rawStateData.map(s => ({
-    ...s,
-    count: Math.round(s.count * SCALE_FACTOR),
-    amount: Math.round(s.amount * SCALE_FACTOR),
-  })).sort((a, b) => b.amount - a.amount), [rawStateData, SCALE_FACTOR]);
-  
+  const stateData = useMemo(() => {
+    if (apiData?.stateData) {
+      return apiData.stateData.sort((a, b) => b.amount - a.amount);
+    }
+    // Use calculated data from variances
+    return rawStateData.sort((a, b) => b.amount - a.amount);
+  }, [apiData, rawStateData]);
+
   // Clear highlighted state if it's no longer in the filtered data
   useEffect(() => {
     if (highlightedState && !stateData.some(s => s.state === highlightedState)) {
       setHighlightedState(null);
     }
   }, [stateData, highlightedState]);
-  
+
+  // ===== ROOT CAUSE DATA: API DATA =====
   const rawRootCauseData = useMemo(() => groupByRootCause(filteredData), [filteredData]);
-  const rootCauseData = useMemo(() => rawRootCauseData.map(rc => ({
-    ...rc,
-    count: Math.round(rc.count * SCALE_FACTOR),
-    amount: Math.round(rc.amount * SCALE_FACTOR),
-    subcategories: rc.subcategories.map(sub => ({
-      ...sub,
-      count: Math.round(sub.count * SCALE_FACTOR),
-      amount: Math.round(sub.amount * SCALE_FACTOR),
-    })),
-  })), [rawRootCauseData, SCALE_FACTOR]);
-  
+  const rootCauseData = useMemo(() => {
+    if (apiData?.rootCauseData) {
+      return apiData.rootCauseData;
+    }
+    // Use calculated data from variances
+    return rawRootCauseData;
+  }, [apiData, rawRootCauseData]);
+
+  // ===== AGING DATA: API DATA =====
   const rawAgingData = useMemo(() => groupByAgingBucket(filteredData), [filteredData]);
-  const agingData = useMemo(() => rawAgingData.map(a => ({
-    ...a,
-    count: Math.round(a.count * SCALE_FACTOR),
-    amount: Math.round(a.amount * SCALE_FACTOR),
-  })), [rawAgingData, SCALE_FACTOR]);
-  
+  const agingData = useMemo(() => {
+    if (apiData?.agingData) {
+      return apiData.agingData;
+    }
+    // Use calculated data from variances
+    return rawAgingData;
+  }, [apiData, rawAgingData]);
+
+  // ===== TREND DATA: From variance data =====
   const rawTrendData = useMemo(() => getTrendData(allData), [allData]);
-  const trendData = useMemo(() => rawTrendData.map(t => ({
-    ...t,
-    new: Math.round(t.new * SCALE_FACTOR),
-    resolved: Math.round(t.resolved * SCALE_FACTOR),
-    amount: Math.round(t.amount * SCALE_FACTOR),
-    net: Math.round(t.net * SCALE_FACTOR),
-  })), [rawTrendData, SCALE_FACTOR]);
+  const trendData = useMemo(() => rawTrendData, [rawTrendData]);
+
+  // Note: sortedData and paginatedData are now handled by server-side pagination
+  // The paginatedData comes directly from useVariances hook above
+
+  const orgMetrics = useMemo(() => calculateOrgMetricsFromVariances(allData), [allData]);
   
-  const sortedData = useMemo(() => {
-    const sorted = [...filteredData].sort((a, b) => {
-      let aVal: any = a[sortColumn as keyof VarianceRecord];
-      let bVal: any = b[sortColumn as keyof VarianceRecord];
-      
-      if (sortColumn === 'priority') {
-        const aRank = PRIORITY_RANK[aVal as string] ?? 3;
-        const bRank = PRIORITY_RANK[bVal as string] ?? 3;
-        return sortDirection === 'asc' ? aRank - bRank : bRank - aRank;
-      }
-      
-      if (typeof aVal === 'string') {
-        aVal = aVal.toLowerCase();
-        bVal = bVal.toLowerCase();
-      }
-      
-      if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
-      if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
-      return 0;
-    });
-    return sorted;
-  }, [filteredData, sortColumn, sortDirection]);
-  
-  const paginatedData = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    return sortedData.slice(start, start + pageSize);
-  }, [sortedData, currentPage, pageSize]);
-  
-  const orgMetrics = useMemo(() => calculateOrgMetrics(allData), [allData]);
-  
-  const allPayorScorecards = useMemo(() => calculatePayorScorecards(allData), [allData]);
+  // ===== PAYOR SCORECARDS: API DATA =====
+  const generatedPayorScorecards = useMemo(() => calculatePayorScorecardsFromVariances(allData), [allData]);
+  const allPayorScorecards = useMemo(() => {
+    if (apiData?.payorScorecards) {
+      return apiData.payorScorecards;
+    }
+    // Use calculated data from variances
+    return generatedPayorScorecards;
+  }, [apiData, generatedPayorScorecards]);
   
   const filteredScorecards = useMemo(() => {
     return allPayorScorecards.filter(s => {
@@ -760,8 +652,14 @@ export default function Dashboard() {
     return Array.from(types).sort();
   }, [allPayorScorecards]);
   
-  const totalPages = Math.ceil(filteredData.length / pageSize);
-  
+  // Handle refresh with API refetch
+  const handleRefresh = useCallback(() => {
+    refetchApi();
+    refetchVariances();
+    refetchPaginatedVariances();
+    setLastUpdated(new Date());
+  }, [refetchApi, refetchVariances, refetchPaginatedVariances]);
+
   const clearFilters = () => {
     setSelectedPayorType("all");
     setSelectedState("all");
@@ -794,11 +692,30 @@ export default function Dashboard() {
             <p className="text-muted-foreground mt-1">ESRD Revenue Cycle Performance Overview</p>
           </div>
           <div className="flex items-center gap-3">
+            {/* API Status Indicator */}
+            {isLoading && (
+              <Badge variant="outline" className="gap-1 text-blue-600 border-blue-200 bg-blue-50">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                Loading...
+              </Badge>
+            )}
+            {hasError && (
+              <Badge variant="outline" className="gap-1 text-amber-600 border-amber-200 bg-amber-50" title="API unavailable">
+                <WifiOff className="h-3 w-3" />
+                Offline Mode
+              </Badge>
+            )}
+            {!isLoading && !hasError && (apiData || variancesData) && (
+              <Badge variant="outline" className="gap-1 text-emerald-600 border-emerald-200 bg-emerald-50">
+                <CheckCircle className="h-3 w-3" />
+                Live
+              </Badge>
+            )}
             <span className="text-xs text-muted-foreground">
               Last updated: {lastUpdated.toLocaleTimeString()}
             </span>
-            <Button variant="outline" size="sm" className="gap-2" data-testid="button-refresh">
-              <RefreshCw className="h-4 w-4" />
+            <Button variant="outline" size="sm" className="gap-2" onClick={handleRefresh} data-testid="button-refresh">
+              <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} />
               Refresh
             </Button>
             <Button variant="outline" size="sm" className="gap-2" data-testid="button-export">
@@ -816,6 +733,9 @@ export default function Dashboard() {
                   <div className="flex items-center gap-2">
                     <Lightbulb className="h-5 w-5 text-primary" />
                     <CardTitle>AI-Generated Executive Insights</CardTitle>
+                    {apiData?.aiInsights && (
+                      <Badge variant="outline" className="text-xs text-emerald-600 border-emerald-200">Live</Badge>
+                    )}
                   </div>
                   {isInsightsOpen ? <ChevronDown className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />}
                 </div>
@@ -823,42 +743,19 @@ export default function Dashboard() {
             </CollapsibleTrigger>
             <CollapsibleContent>
               <CardContent>
-                <div className="grid md:grid-cols-3 gap-6">
-                  <div>
-                    <h4 className="font-semibold flex items-center gap-2 mb-3">
-                      <BarChart3 className="h-4 w-4 text-blue-500" />
-                      Key Insights This Week
-                    </h4>
-                    <ul className="space-y-2 text-sm text-muted-foreground">
-                      <li>• Medicare Advantage variances increased 23% driven by Humana authorization denials</li>
-                      <li>• Texas region showing 45% higher variance rate than national average</li>
-                      <li>• Coding errors resolution time improved by 5 days after new training program</li>
-                      <li>• Top 10 payors account for 68% of total variance dollars</li>
-                    </ul>
+                {isLoading ? (
+                  <div className="grid md:grid-cols-3 gap-6">
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="space-y-3">
+                        <Skeleton className="h-5 w-40" />
+                        <Skeleton className="h-4 w-full" />
+                        <Skeleton className="h-4 w-full" />
+                        <Skeleton className="h-4 w-3/4" />
+                      </div>
+                    ))}
                   </div>
-                  <div>
-                    <h4 className="font-semibold flex items-center gap-2 mb-3">
-                      <AlertCircle className="h-4 w-4 text-amber-500" />
-                      Action Required
-                    </h4>
-                    <ul className="space-y-2 text-sm text-muted-foreground">
-                      <li className="text-amber-600">• 351 variances approaching timely filing deadline (next 14 days)</li>
-                      <li className="text-amber-600">• 134 high-priority variances unassigned</li>
-                      <li className="text-rose-600">• Cigna contract rate discrepancy affecting 68 claims - escalation recommended</li>
-                    </ul>
-                  </div>
-                  <div>
-                    <h4 className="font-semibold flex items-center gap-2 mb-3">
-                      <TrendingUp className="h-4 w-4 text-emerald-500" />
-                      Positive Trends
-                    </h4>
-                    <ul className="space-y-2 text-sm text-muted-foreground">
-                      <li className="text-emerald-600">• Overall resolution rate improved 3.2% month-over-month</li>
-                      <li className="text-emerald-600">• Average days to resolution decreased from 38 to 34 days</li>
-                      <li className="text-emerald-600">• Recovery rate at highest level in 6 months</li>
-                    </ul>
-                  </div>
-                </div>
+                ) : (
+                    <div className="grid md:grid-cols-3 gap-6"> {/* Key Insights */} <div> <h4 className="font-semibold flex items-center gap-2 mb-3"> <BarChart3 className="h-4 w-4 text-blue-500" /> Key Insights This Week </h4> <div className="space-y-2 text-sm text-muted-foreground"> {apiData?.aiInsights?.keyInsights && apiData.aiInsights.keyInsights .split(/[\n•]/) .filter((line) => line.trim()) .map((insight, idx) => ( <p key={idx}> • {insight.trim().replace(/^[-•]\s*/, "")} </p> ))} </div> </div> {/* Action Required */} <div> <h4 className="font-semibold flex items-center gap-2 mb-3"> <AlertCircle className="h-4 w-4 text-amber-500" /> Action Required </h4> <div className="space-y-2 text-sm"> {apiData?.aiInsights?.actionRequired && apiData.aiInsights.actionRequired .split(/[\n•]/) .filter((line) => line.trim()) .map((action, idx) => ( <p key={idx} className={idx < 2 ? "text-amber-600" : "text-rose-600"} > • {action.trim().replace(/^[-•]\s*/, "")} </p> ))} </div> </div> {/* Positive Trends */} <div> <h4 className="font-semibold flex items-center gap-2 mb-3"> <TrendingUp className="h-4 w-4 text-emerald-500" /> Positive Trends </h4> <div className="space-y-2 text-sm"> {apiData?.aiInsights?.positiveTrends && apiData.aiInsights.positiveTrends .split(/[\n•]/) .filter((line) => line.trim()) .map((trend, idx) => ( <p key={idx} className="text-emerald-600"> • {trend.trim().replace(/^[-•]\s*/, "")} </p> ))} </div> </div> </div>                )}
               </CardContent>
             </CollapsibleContent>
           </Card>
@@ -928,7 +825,7 @@ export default function Dashboard() {
               <span className="text-sm font-medium">Filters:</span>
             </div>
             
-            <Select value={selectedPayorType} onValueChange={setSelectedPayorType}>
+            <Select value={selectedPayorType} onValueChange={(v) => { setSelectedPayorType(v); setCurrentPage(1); }}>
               <SelectTrigger className="w-[180px]" data-testid="filter-payor-type">
                 <SelectValue placeholder="Payor Type" />
               </SelectTrigger>
@@ -946,7 +843,7 @@ export default function Dashboard() {
               </SelectContent>
             </Select>
             
-            <Select value={selectedState} onValueChange={setSelectedState}>
+            <Select value={selectedState} onValueChange={(v) => { setSelectedState(v); setCurrentPage(1); }}>
               <SelectTrigger className="w-[150px]" data-testid="filter-state">
                 <SelectValue placeholder="State" />
               </SelectTrigger>
@@ -958,7 +855,7 @@ export default function Dashboard() {
               </SelectContent>
             </Select>
             
-            <Select value={selectedStatus} onValueChange={setSelectedStatus}>
+            <Select value={selectedStatus} onValueChange={(v) => { setSelectedStatus(v); setCurrentPage(1); }}>
               <SelectTrigger className="w-[140px]" data-testid="filter-status">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
@@ -970,7 +867,7 @@ export default function Dashboard() {
               </SelectContent>
             </Select>
             
-            <Select value={selectedRootCause} onValueChange={setSelectedRootCause}>
+            <Select value={selectedRootCause} onValueChange={(v) => { setSelectedRootCause(v); setCurrentPage(1); }}>
               <SelectTrigger className="w-[180px]" data-testid="filter-root-cause">
                 <SelectValue placeholder="Root Cause" />
               </SelectTrigger>
@@ -985,7 +882,7 @@ export default function Dashboard() {
             <Input
               placeholder="Search ID, Payor, Patient..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
               className="w-[200px]"
               data-testid="input-search"
             />
@@ -1748,8 +1645,9 @@ export default function Dashboard() {
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle>
+                <CardTitle className="flex items-center gap-2">
                   Variance Details
+                  {isPaginatedLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
                   {(selectedPayorType !== "all" || selectedState !== "all" || selectedStatus !== "all" || selectedRootCause !== "all") && (
                     <span className="text-sm font-normal text-muted-foreground ml-2">
                       ({[
@@ -1762,7 +1660,7 @@ export default function Dashboard() {
                   )}
                 </CardTitle>
                 <CardDescription>
-                  {formatNumber(filteredData.length)} variances • Page {currentPage} of {totalPages}
+                  {formatNumber(totalCount)} variances • Page {currentPage} of {totalPages}
                 </CardDescription>
               </div>
               <div className="flex items-center gap-2">
@@ -1962,9 +1860,9 @@ export default function Dashboard() {
                       key={row.id} 
                       className="cursor-pointer hover:bg-muted/50"
                       onClick={() => { setSelectedVariance(row); setShowResubmissionDraft(false); }}
-                      data-testid={`variance-row-${row.id}`}
+                      data-testid={`variance-row-${row.variance_id || row.id}`}
                     >
-                      <TableCell className="font-mono text-xs">{row.id}</TableCell>
+                      <TableCell className="font-mono text-xs">{row.variance_id || row.id}</TableCell>
                       <TableCell>
                         <div className="flex flex-col">
                           <span className="text-sm font-medium truncate max-w-[200px]">{row.payorName}</span>
@@ -1988,15 +1886,22 @@ export default function Dashboard() {
                         {row.agingDays}d
                       </TableCell>
                       <TableCell>
-                        <Badge variant={
-                          row.status === 'Resolved' ? 'secondary' :
-                          row.status === 'Open' ? 'outline' :
-                          row.status === 'Under Appeal' ? 'default' : 'outline'
-                        } className={cn(
-                          "text-xs",
-                          row.status === 'Resolved' && "bg-emerald-100 text-emerald-700",
-                          row.status === 'Written Off' && "bg-gray-100 text-gray-600"
+                        <Badge variant="outline" className={cn(
+                          "text-xs relative pl-4",
+                          row.status === 'Resolved' && "bg-emerald-100 text-emerald-700 border-emerald-300",
+                          row.status === 'Written Off' && "bg-gray-100 text-gray-600 border-gray-300",
+                          row.status === 'Open' && "bg-blue-50 text-blue-700 border-blue-300",
+                          row.status === 'In Progress' && "bg-amber-50 text-amber-700 border-amber-300",
+                          row.status === 'Under Appeal' && "bg-purple-50 text-purple-700 border-purple-300"
                         )}>
+                          <span className={cn(
+                            "absolute left-1 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full",
+                            row.status === 'Resolved' && "bg-emerald-500",
+                            row.status === 'Written Off' && "bg-gray-400",
+                            row.status === 'Open' && "bg-blue-500",
+                            row.status === 'In Progress' && "bg-amber-500",
+                            row.status === 'Under Appeal' && "bg-purple-500"
+                          )} />
                           {row.status}
                         </Badge>
                       </TableCell>
@@ -2005,11 +1910,17 @@ export default function Dashboard() {
                           <span className="text-xs text-muted-foreground">—</span>
                         ) : (
                           <Badge variant="outline" className={cn(
-                            "text-xs",
-                            row.priority === 'High' && "border-rose-500 text-rose-600",
-                            row.priority === 'Medium' && "border-amber-500 text-amber-600",
-                            row.priority === 'Low' && "border-gray-400 text-gray-500"
+                            "text-xs relative pl-4",
+                            row.priority === 'High' && "border-rose-500 text-rose-600 bg-rose-50",
+                            row.priority === 'Medium' && "border-amber-500 text-amber-600 bg-amber-50",
+                            row.priority === 'Low' && "border-gray-400 text-gray-500 bg-gray-50"
                           )}>
+                            <span className={cn(
+                              "absolute left-1 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full",
+                              row.priority === 'High' && "bg-rose-500",
+                              row.priority === 'Medium' && "bg-amber-500",
+                              row.priority === 'Low' && "bg-gray-400"
+                            )} />
                             {row.priority}
                           </Badge>
                         )}
@@ -2023,14 +1934,14 @@ export default function Dashboard() {
             
             <div className="flex items-center justify-between mt-4 pt-4 border-t">
               <div className="text-sm text-muted-foreground">
-                Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, filteredData.length)} of {formatNumber(filteredData.length)}
+                Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, totalCount)} of {formatNumber(totalCount)}
               </div>
               <div className="flex items-center gap-2">
                 <Button 
                   variant="outline" 
                   size="sm" 
                   onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                  disabled={currentPage === 1}
+                  disabled={currentPage === 1 || isPaginatedLoading}
                   data-testid="button-prev-page"
                 >
                   Previous
@@ -2054,6 +1965,7 @@ export default function Dashboard() {
                         size="sm"
                         className="w-8 h-8 p-0"
                         onClick={() => setCurrentPage(page)}
+                        disabled={isPaginatedLoading}
                       >
                         {page}
                       </Button>
@@ -2064,7 +1976,7 @@ export default function Dashboard() {
                   variant="outline" 
                   size="sm" 
                   onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                  disabled={currentPage === totalPages}
+                  disabled={currentPage === totalPages || isPaginatedLoading}
                   data-testid="button-next-page"
                 >
                   Next
@@ -2083,44 +1995,145 @@ export default function Dashboard() {
                 <SheetTitle className="flex items-center gap-2">
                   <FileText className="h-5 w-5 text-primary" />
                   Variance Details
+                  {isDetailsLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
                 </SheetTitle>
                 <SheetDescription>
-                  {selectedVariance.id} - {selectedVariance.payorName}
+                  {selectedVariance.variance_id || selectedVariance.id} - {selectedVariance.payorName}
                 </SheetDescription>
               </SheetHeader>
               
               <div className="space-y-6 py-6">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-xs text-muted-foreground">Patient</p>
-                    <p className="font-medium">{selectedVariance.patientName}</p>
+                {/* Use API data if available, fallback to selected variance data */}
+                {(() => {
+                  const displayVariance = varianceDetails?.variance || selectedVariance;
+                  return (
+                    <>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <p className="text-xs text-muted-foreground">Patient</p>
+                          <p className="font-medium">{displayVariance.patientName}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Date of Service</p>
+                          <p className="font-medium">{displayVariance.dateOfService}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Billed Amount</p>
+                          <p className="font-medium">${displayVariance.billedAmount?.toFixed(2) || '0.00'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Paid Amount</p>
+                          <p className="font-medium">${displayVariance.paidAmount?.toFixed(2) || '0.00'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Variance</p>
+                          <p className="font-medium text-rose-600">-${displayVariance.varianceAmount?.toFixed(2) || '0.00'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Aging</p>
+                          <p className={cn(
+                            "font-medium",
+                            (displayVariance.agingDays || 0) > 120 ? "text-rose-600" :
+                            (displayVariance.agingDays || 0) > 60 ? "text-amber-600" : ""
+                          )}>{displayVariance.agingDays || 0} days</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Payor Type</p>
+                          <p className="font-medium">{displayVariance.payorType}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">State</p>
+                          <p className="font-medium">{displayVariance.stateName || displayVariance.state}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Status</p>
+                          <Badge variant="outline" className={cn(
+                            "relative pl-4",
+                            displayVariance.status === 'Resolved' && "bg-emerald-100 text-emerald-700 border-emerald-300",
+                            displayVariance.status === 'Written Off' && "bg-gray-100 text-gray-600 border-gray-300",
+                            displayVariance.status === 'Open' && "bg-blue-50 text-blue-700 border-blue-300",
+                            displayVariance.status === 'In Progress' && "bg-amber-50 text-amber-700 border-amber-300",
+                            displayVariance.status === 'Under Appeal' && "bg-purple-50 text-purple-700 border-purple-300"
+                          )}>
+                            <span className={cn(
+                              "absolute left-1 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full",
+                              displayVariance.status === 'Resolved' && "bg-emerald-500",
+                              displayVariance.status === 'Written Off' && "bg-gray-400",
+                              displayVariance.status === 'Open' && "bg-blue-500",
+                              displayVariance.status === 'In Progress' && "bg-amber-500",
+                              displayVariance.status === 'Under Appeal' && "bg-purple-500"
+                            )} />
+                            {displayVariance.status}
+                          </Badge>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Treatment Count</p>
+                          <p className="font-medium">{displayVariance.treatmentCount || 1}</p>
+                        </div>
+                      </div>
+
+                      {/* Show claim dates */}
+                      <div className="space-y-2 pt-2 border-t">
+                        <h4 className="font-semibold text-sm">Claim Timeline</h4>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <p className="text-xs text-muted-foreground">Claim Submission Date</p>
+                            <p className="font-medium">{displayVariance.claimSubmissionDate || 'N/A'}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Variance Identified Date</p>
+                            <p className="font-medium">{displayVariance.varianceIdentifiedDate || 'N/A'}</p>
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  );
+                })()}
+
+                {/* Show notes from API if available */}
+                {varianceDetails?.notes && varianceDetails.notes.length > 0 && (
+                  <div className="space-y-2 pt-2 border-t">
+                    <h4 className="font-semibold text-sm">Notes</h4>
+                    <div className="space-y-1">
+                      {varianceDetails.notes.map((note, idx) => (
+                        <p key={idx} className="text-sm text-muted-foreground">• {note}</p>
+                      ))}
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Date of Service</p>
-                    <p className="font-medium">{selectedVariance.dateOfService}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Billed Amount</p>
-                    <p className="font-medium">${selectedVariance.billedAmount.toFixed(2)}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Paid Amount</p>
-                    <p className="font-medium">${selectedVariance.paidAmount.toFixed(2)}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Variance</p>
-                    <p className="font-medium text-rose-600">-${selectedVariance.varianceAmount.toFixed(2)}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Aging</p>
-                    <p className={cn(
-                      "font-medium",
-                      selectedVariance.agingDays > 120 ? "text-rose-600" : 
-                      selectedVariance.agingDays > 60 ? "text-amber-600" : ""
-                    )}>{selectedVariance.agingDays} days</p>
-                  </div>
-                </div>
+                )}
                 
+                {/* Show history from API if available */}
+                {varianceDetails?.history && varianceDetails.history.length > 0 && (
+                  <div className="space-y-2 pt-2 border-t">
+                    <h4 className="font-semibold text-sm">Activity History</h4>
+                    <div className="space-y-2">
+                      {varianceDetails.history.map((entry, idx) => (
+                        <div key={idx} className="flex items-center justify-between text-sm p-2 bg-muted/30 rounded">
+                          <span className="text-muted-foreground">{entry.date}</span>
+                          <span className="font-medium">{entry.action}</span>
+                          <span className="text-muted-foreground">{entry.user}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Show related claims from API if available */}
+                {varianceDetails?.relatedClaims && varianceDetails.relatedClaims.length > 0 && (
+                  <div className="space-y-2 pt-2 border-t">
+                    <h4 className="font-semibold text-sm">Related Claims</h4>
+                    <div className="space-y-2">
+                      {varianceDetails.relatedClaims.map((claim, idx) => (
+                        <div key={idx} className="flex items-center justify-between text-sm p-2 bg-muted/30 rounded">
+                          <span className="font-mono">{claim.claimId}</span>
+                          <span className="text-muted-foreground">{claim.date}</span>
+                          <span className="font-medium">${claim.amount.toFixed(2)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <div className="space-y-3">
                   <h4 className="font-semibold flex items-center gap-2">
                     <AlertCircle className="h-4 w-4 text-amber-500" />
@@ -2154,37 +2167,61 @@ export default function Dashboard() {
                     <h4 className="font-semibold flex items-center gap-2">
                       <TrendingUp className="h-4 w-4 text-primary" />
                       Priority Assessment
+                      {isDetailsLoading && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
                     </h4>
-                    <Card className={cn(
-                      "border-2",
-                      selectedVariance.priority === 'High' && "border-rose-200 bg-rose-50/30",
-                      selectedVariance.priority === 'Medium' && "border-amber-200 bg-amber-50/30",
-                      selectedVariance.priority === 'Low' && "border-gray-200 bg-gray-50/30"
-                    )}>
-                      <CardContent className="pt-4">
-                        <div className="flex items-center gap-2 mb-3">
-                          <Badge variant="outline" className={cn(
-                            selectedVariance.priority === 'High' && "border-rose-500 text-rose-600",
-                            selectedVariance.priority === 'Medium' && "border-amber-500 text-amber-600",
-                            selectedVariance.priority === 'Low' && "border-gray-400 text-gray-500"
-                          )}>
-                            {selectedVariance.priority} Priority
-                          </Badge>
-                        </div>
-                        <p className="text-xs font-medium mb-2 text-muted-foreground">Why this priority?</p>
-                        <ul className="text-sm space-y-1 mb-3">
-                          {PRIORITY_EXPLANATIONS[selectedVariance.priority]?.criteria.map((criterion, i) => (
-                            <li key={i} className="flex items-start gap-2">
-                              <CheckCircle className="h-3 w-3 mt-1 text-emerald-500 flex-shrink-0" />
-                              <span className="text-muted-foreground">{criterion}</span>
-                            </li>
-                          ))}
-                        </ul>
-                        <p className="text-sm font-medium">
-                          {PRIORITY_EXPLANATIONS[selectedVariance.priority]?.recommendation}
-                        </p>
-                      </CardContent>
-                    </Card>
+                    {(() => {
+                      // Use data from variance details API if available
+                      const displayVariance = varianceDetails?.variance || selectedVariance;
+                      const highPriorityNotes = displayVariance.highPriorityNotes;
+                      const displayPriority = displayVariance.priority;
+                      
+                      return (
+                        <Card className={cn(
+                          "border-2",
+                          displayPriority === 'High' && "border-rose-200 bg-rose-50/30",
+                          displayPriority === 'Medium' && "border-amber-200 bg-amber-50/30",
+                          displayPriority === 'Low' && "border-gray-200 bg-gray-50/30"
+                        )}>
+                          <CardContent className="pt-4">
+                            <div className="flex items-center gap-2 mb-3">
+                              <Badge variant="outline" className={cn(
+                                "relative pl-4",
+                                displayPriority === 'High' && "border-rose-500 text-rose-600 bg-rose-50",
+                                displayPriority === 'Medium' && "border-amber-500 text-amber-600 bg-amber-50",
+                                displayPriority === 'Low' && "border-gray-400 text-gray-500 bg-gray-50"
+                              )}>
+                                <span className={cn(
+                                  "absolute left-1 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full",
+                                  displayPriority === 'High' && "bg-rose-500",
+                                  displayPriority === 'Medium' && "bg-amber-500",
+                                  displayPriority === 'Low' && "bg-gray-400"
+                                )} />
+                                {displayPriority} Priority
+                              </Badge>
+                            </div>
+                            
+                            {/* Show high_priority notes from API if available */}
+                            {highPriorityNotes ? (
+                              <div className="space-y-2">
+                                {highPriorityNotes.split('\n').filter(line => line.trim()).map((line, i) => (
+                                  <p key={i} className="text-sm text-muted-foreground">
+                                    {line.trim()}
+                                  </p>
+                                ))}
+                              </div>
+                            ) : (
+                              <>
+                                <ul className="text-sm space-y-1 mb-3">
+
+                                </ul>
+                                <p className="text-sm font-medium">
+                                </p>
+                              </>
+                            )}
+                          </CardContent>
+                        </Card>
+                      );
+                    })()}
                   </div>
                 )}
                 
