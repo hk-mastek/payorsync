@@ -5,7 +5,8 @@
 const isDevelopment = import.meta.env.DEV || import.meta.env.MODE === 'development';
 
 // API Base URL - uses environment variable if set, otherwise falls back to localhost for local dev
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || (isDevelopment ? 'http://localhost:8000' : '');
+const LIVE_URL = "https://payorsync-be-595213741879.asia-south1.run.app/";
+export const API_BASE_URL = LIVE_URL || (isDevelopment ? 'http://localhost:8000' : '');
 
 console.log("Server: " ,isDevelopment);
 console.log("API Url: " ,API_BASE_URL);
